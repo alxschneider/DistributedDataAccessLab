@@ -1,0 +1,254 @@
+@page "/cart"
+@using WebFrontend.Models
+@using WebFrontend.Services
+@inject CartService CartSvc
+@inject CustomerService CustSvc
+@inject ProductService ProdSvc
+@inject ProfileState Profile
+@implements IDisposable
+@rendermode InteractiveServer
+
+<PageTitle>Cart — FDU Marketplace</PageTitle>
+
+<h3>Shopping Cart</h3>
+
+@if (Profile.IsSeller)
+{
+    <div class="alert alert-warning">
+        <h5>🚫 Sellers don't have a shopping cart.</h5>
+        <p>Switch to a Buyer profile or Admin mode to use the cart.</p>
+    </div>
+}
+else
+{
+    @if (Profile.IsAdmin)
+    {
+        <div class="row mb-3 g-2">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text">Buyer</span>
+                    <select class="form-select" @bind="selectedBuyerId">
+                        <option value="0">— Select Buyer —</option>
+                        @foreach (var c in buyerList)
+                        {
+                            <option value="@c.Id">@c.Name</option>
+                        }
+                    </select>
+                    <button class="btn btn-primary" @onclick="LoadCart">Load</button>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="mb-3">
+            <span class="text-muted">Shopping as <strong>@Profile.CurrentCustomer!.Name</strong></span>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(message))
+    {
+        <div class="alert @(isError ? "alert-danger" : "alert-success") alert-dismissible">
+            @message
+            <button type="button" class="btn-close" @onclick="() => message = null"></button>
+        </div>
+    }
+
+    @if (ActiveBuyerId > 0)
+    {
+        <div class="card mb-3">
+            <div class="card-header">Add Item to Cart</div>
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-5">
+                        <label class="form-label">Product</label>
+                        <select class="form-select" @bind="addProductId">
+                            <option value="0">— Select Product —</option>
+                            @foreach (var p in productList)
+                            {
+                                <option value="@p.Id">@p.Name ($ @p.FinalPrice.ToString("N2"))</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Quantity</label>
+                        <input class="form-control" type="number" @bind="addQuantity" />
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-success" @onclick="AddItem">➕ Add</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (cartResponse != null && cartResponse.Items.Any())
+        {
+            <table class="table table-striped">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Item ID</th>
+                        <th>Product</th>
+                        <th>Seller</th>
+                        <th>Unit Price</th>
+                        <th>Discount</th>
+                        <th>Quantity</th>
+                        <th>Subtotal</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in cartResponse.Items)
+                    {
+                        <tr>
+                            <td>@item.Id</td>
+                            <td>@item.ProductName</td>
+                            <td>@SellerName(item.SellerId)</td>
+                            <td>$ @item.UnitPrice.ToString("N2")</td>
+                            <td>@(item.DiscountPercent > 0 ? $"{item.DiscountPercent}%" : "—")</td>
+                            <td>
+                                <div class="input-group input-group-sm" style="width: 130px">
+                                    <button class="btn btn-outline-secondary" @onclick="() => UpdateQty(item.Id, item.Quantity - 1)">−</button>
+                                    <input class="form-control text-center" value="@item.Quantity" readonly />
+                                    <button class="btn btn-outline-secondary" @onclick="() => UpdateQty(item.Id, item.Quantity + 1)">+</button>
+                                </div>
+                            </td>
+                            <td>$ @((item.UnitPrice * (1 - item.DiscountPercent / 100) * item.Quantity).ToString("N2"))</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveItem(item.Id)">🗑️</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr class="table-success">
+                        <td colspan="6" class="text-end"><strong>Total:</strong></td>
+                        <td colspan="2"><strong>$ @cartResponse.Total.ToString("N2")</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <div class="d-flex gap-2">
+                <button class="btn btn-danger" @onclick="ClearCart">🗑️ Clear Cart</button>
+                <button class="btn btn-primary btn-lg" @onclick="Checkout">✅ Checkout</button>
+            </div>
+        }
+        else if (cartLoaded)
+        {
+            <div class="alert alert-info">Cart is empty. Add some products!</div>
+        }
+    }
+    else if (Profile.IsAdmin)
+    {
+        <div class="alert alert-info">Select a buyer above to view their cart.</div>
+    }
+}
+
+@code {
+    private CartResponse? cartResponse;
+    private bool cartLoaded;
+    private int addProductId, addQuantity = 1;
+    private string? message;
+    private bool isError;
+    private List<Customer> allCustomers = new();
+    private List<Customer> buyerList = new();
+    private List<Product> productList = new();
+    private int selectedBuyerId;
+    private int lastProfileId;
+
+    private int ActiveBuyerId => Profile.IsBuyer ? Profile.CurrentId : selectedBuyerId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Profile.OnChange += HandleProfileChange;
+        try { allCustomers = await CustSvc.GetAllAsync(); } catch { }
+        buyerList = allCustomers.Where(c => c.Role == "Buyer").ToList();
+        try { productList = await ProdSvc.GetAllAsync(); } catch { }
+        if (Profile.IsBuyer)
+            await LoadCart();
+    }
+
+    private async void HandleProfileChange()
+    {
+        if (Profile.IsBuyer && Profile.CurrentId != lastProfileId)
+        {
+            selectedBuyerId = 0;
+            await LoadCart();
+        }
+        else if (!Profile.IsBuyer)
+        {
+            cartResponse = null;
+            cartLoaded = false;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string SellerName(int id) => allCustomers.FirstOrDefault(c => c.Id == id)?.Name ?? $"#{id}";
+
+    private async Task LoadCart()
+    {
+        lastProfileId = Profile.IsBuyer ? Profile.CurrentId : 0;
+        var buyerId = ActiveBuyerId;
+        if (buyerId <= 0) return;
+        try
+        {
+            cartResponse = await CartSvc.GetCartAsync(buyerId);
+            cartLoaded = true;
+        }
+        catch { cartResponse = null; cartLoaded = true; }
+    }
+
+    private async Task AddItem()
+    {
+        var resp = await CartSvc.AddItemAsync(ActiveBuyerId, addProductId, addQuantity);
+        if (resp.IsSuccessStatusCode)
+        {
+            message = "Item added!"; isError = false;
+            addProductId = 0; addQuantity = 1;
+            await LoadCart();
+        }
+        else
+        {
+            message = $"Error: {await resp.Content.ReadAsStringAsync()}"; isError = true;
+        }
+    }
+
+    private async Task UpdateQty(int itemId, int quantity)
+    {
+        await CartSvc.UpdateItemAsync(ActiveBuyerId, itemId, quantity);
+        await LoadCart();
+    }
+
+    private async Task RemoveItem(int itemId)
+    {
+        await CartSvc.RemoveItemAsync(ActiveBuyerId, itemId);
+        await LoadCart();
+    }
+
+    private async Task ClearCart()
+    {
+        await CartSvc.ClearCartAsync(ActiveBuyerId);
+        cartResponse = null;
+        cartLoaded = true;
+        message = "Cart cleared."; isError = false;
+    }
+
+    private async Task Checkout()
+    {
+        var resp = await CartSvc.CheckoutAsync(ActiveBuyerId);
+        if (resp.IsSuccessStatusCode)
+        {
+            message = "Checkout successful! Order created."; isError = false;
+            cartResponse = null;
+            cartLoaded = true;
+        }
+        else
+        {
+            message = $"Checkout error: {await resp.Content.ReadAsStringAsync()}"; isError = true;
+        }
+    }
+
+    public void Dispose()
+    {
+        Profile.OnChange -= HandleProfileChange;
+    }
+}

@@ -1,0 +1,23 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio
+.vs/
+*.csproj.user
+launchSettings.json
+
+## Rider
+.idea/
+
+## OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+## User secrets
+secrets.json

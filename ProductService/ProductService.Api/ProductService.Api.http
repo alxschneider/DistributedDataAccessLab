@@ -1,0 +1,124 @@
+@baseUrl = http://localhost:5003
+
+### ========== PRODUCTS ==========
+
+### Create Product (Seller=1)
+POST {{baseUrl}}/api/products
+Content-Type: application/json
+
+{
+  "sellerId": 1,
+  "name": "Notebook Gamer X",
+  "description": "Notebook com RTX 4060, 16GB RAM, 512GB SSD",
+  "category": "Eletrônicos",
+  "price": 5499.99,
+  "stock": 50,
+  "discountPercent": 10,
+  "imageUrl": "https://example.com/notebook.jpg"
+}
+
+### Create Another Product (Seller=1)
+POST {{baseUrl}}/api/products
+Content-Type: application/json
+
+{
+  "sellerId": 1,
+  "name": "Mouse Wireless Pro",
+  "description": "Mouse sem fio ergonômico 2.4GHz",
+  "category": "Periféricos",
+  "price": 149.90,
+  "stock": 200,
+  "discountPercent": 0,
+  "imageUrl": "https://example.com/mouse.jpg"
+}
+
+### Create Product (Seller=3 — Carlos)
+POST {{baseUrl}}/api/products
+Content-Type: application/json
+
+{
+  "sellerId": 3,
+  "name": "Teclado Mecânico RGB",
+  "description": "Teclado mecânico switches blue, backlit RGB",
+  "category": "Periféricos",
+  "price": 299.90,
+  "stock": 100,
+  "discountPercent": 15,
+  "imageUrl": "https://example.com/teclado.jpg"
+}
+
+### Get All Products
+GET {{baseUrl}}/api/products
+
+### Get All Products — Search
+GET {{baseUrl}}/api/products?search=Mouse
+
+### Get All Products — Filter by Category
+GET {{baseUrl}}/api/products?category=Periféricos
+
+### Get All Products — Filter by Price Range
+GET {{baseUrl}}/api/products?minPrice=100&maxPrice=500
+
+### Get All Products — Filter by Seller
+GET {{baseUrl}}/api/products?sellerId=1
+
+### Get Product by ID
+GET {{baseUrl}}/api/products/1
+
+### Update Product (only seller owner)
+PUT {{baseUrl}}/api/products/1
+Content-Type: application/json
+X-User-Id: 1
+
+{
+  "name": "Notebook Gamer X Pro",
+  "description": "Notebook com RTX 4070, 32GB RAM, 1TB SSD",
+  "category": "Eletrônicos",
+  "price": 6499.99,
+  "imageUrl": "https://example.com/notebook-pro.jpg"
+}
+
+### Update Stock (absolute set)
+PATCH {{baseUrl}}/api/products/1/stock
+Content-Type: application/json
+
+{
+  "quantity": 75
+}
+
+### Update Discount
+PATCH {{baseUrl}}/api/products/1/discount
+Content-Type: application/json
+
+{
+  "discountPercent": 20
+}
+
+### Decrement Stock (used by OrderService)
+PATCH {{baseUrl}}/api/products/1/stock/decrement
+Content-Type: application/json
+
+{
+  "quantity": 5
+}
+
+### Increment Stock (used on cancel/return)
+PATCH {{baseUrl}}/api/products/1/stock/increment
+Content-Type: application/json
+
+{
+  "quantity": 5
+}
+
+### Delete Product (soft delete — only seller owner)
+DELETE {{baseUrl}}/api/products/2
+X-User-Id: 1
+
+### Get Products by Seller
+GET {{baseUrl}}/api/products/seller/1
+
+### General Dashboard
+GET {{baseUrl}}/api/products/dashboard
+
+### Seller Dashboard
+GET {{baseUrl}}/api/products/seller/1/dashboard

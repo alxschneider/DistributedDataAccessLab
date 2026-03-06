@@ -1,0 +1,79 @@
+@baseUrl = http://localhost:5002
+
+### ========== ORDERS ==========
+
+### Create Order (Buyer=2 buys products from Seller=1)
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+
+{
+  "buyerId": 2,
+  "items": [
+    { "productId": 1, "quantity": 2 },
+    { "productId": 2, "quantity": 1 }
+  ]
+}
+
+### Get All Orders
+GET {{baseUrl}}/api/orders
+
+### Get Orders by Buyer
+GET {{baseUrl}}/api/orders?buyerId=2
+
+### Get Orders by Seller
+GET {{baseUrl}}/api/orders?sellerId=1
+
+### Get Orders by Status
+GET {{baseUrl}}/api/orders?status=AwaitingPayment
+
+### Get Order by ID
+GET {{baseUrl}}/api/orders/1
+
+### Update Status to Paid (after payment)
+PUT {{baseUrl}}/api/orders/1/status
+Content-Type: application/json
+
+{
+  "status": "Paid"
+}
+
+### Update Status to Shipped
+PUT {{baseUrl}}/api/orders/1/status
+Content-Type: application/json
+
+{
+  "status": "Shipped"
+}
+
+### Update Status to Delivered
+PUT {{baseUrl}}/api/orders/1/status
+Content-Type: application/json
+
+{
+  "status": "Delivered"
+}
+
+### Cancel Order
+POST {{baseUrl}}/api/orders/1/cancel
+Content-Type: application/json
+
+{
+  "reason": "Comprei errado"
+}
+
+### Return Order (after delivered)
+POST {{baseUrl}}/api/orders/1/return
+Content-Type: application/json
+
+{
+  "reason": "Produto com defeito"
+}
+
+### General Dashboard
+GET {{baseUrl}}/api/orders/dashboard
+
+### Buyer Dashboard
+GET {{baseUrl}}/api/orders/buyer/2/dashboard
+
+### Seller Dashboard
+GET {{baseUrl}}/api/orders/seller/1/dashboard

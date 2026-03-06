@@ -1,0 +1,41 @@
+@baseUrl = http://localhost:5005
+
+### ========== CART ==========
+
+### Get Cart (Buyer=2)
+GET {{baseUrl}}/api/cart/2
+
+### Add Item to Cart
+POST {{baseUrl}}/api/cart/2/items
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "quantity": 3
+}
+
+### Add Another Item
+POST {{baseUrl}}/api/cart/2/items
+Content-Type: application/json
+
+{
+  "productId": 2,
+  "quantity": 1
+}
+
+### Update Item Quantity (itemId=1)
+PUT {{baseUrl}}/api/cart/2/items/1
+Content-Type: application/json
+
+{
+  "quantity": 5
+}
+
+### Remove Item from Cart (itemId=2)
+DELETE {{baseUrl}}/api/cart/2/items/2
+
+### Checkout — creates order and clears cart
+POST {{baseUrl}}/api/cart/2/checkout
+
+### Clear Entire Cart
+DELETE {{baseUrl}}/api/cart/2

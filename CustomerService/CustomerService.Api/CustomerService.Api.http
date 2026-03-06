@@ -1,0 +1,88 @@
+@baseUrl = http://localhost:5001
+
+### ========== CUSTOMERS ==========
+
+### Create Seller
+POST {{baseUrl}}/api/customers
+Content-Type: application/json
+
+{
+  "name": "João Vendedor",
+  "email": "joao@seller.com",
+  "phone": "11999990001",
+  "document": "12345678901",
+  "role": "Seller",
+  "address": "Rua do Vendedor, 100 - SP"
+}
+
+### Create Buyer
+POST {{baseUrl}}/api/customers
+Content-Type: application/json
+
+{
+  "name": "Maria Compradora",
+  "email": "maria@buyer.com",
+  "phone": "11999990002",
+  "document": "98765432101",
+  "role": "Buyer",
+  "address": "Rua da Compradora, 200 - RJ"
+}
+
+### Create Another Seller
+POST {{baseUrl}}/api/customers
+Content-Type: application/json
+
+{
+  "name": "Carlos Vendedor",
+  "email": "carlos@seller.com",
+  "phone": "11999990003",
+  "document": "11122233344",
+  "role": "Seller",
+  "address": "Rua do Carlos, 300 - MG"
+}
+
+### List All (as Buyer — sees everyone)
+GET {{baseUrl}}/api/customers
+X-User-Role: Buyer
+X-User-Id: 2
+
+### List All (as Seller id=1 — cannot see other sellers)
+GET {{baseUrl}}/api/customers
+X-User-Role: Seller
+X-User-Id: 1
+
+### Get Seller by ID (as Buyer — allowed)
+GET {{baseUrl}}/api/customers/1
+X-User-Role: Buyer
+X-User-Id: 2
+
+### Get Other Seller by ID (as Seller id=1 — FORBIDDEN)
+GET {{baseUrl}}/api/customers/3
+X-User-Role: Seller
+X-User-Id: 1
+
+### Update Own Profile
+PUT {{baseUrl}}/api/customers/2
+Content-Type: application/json
+X-User-Id: 2
+
+{
+  "name": "Maria Compradora Updated",
+  "email": "maria@buyer.com",
+  "phone": "11999990002",
+  "document": "98765432101",
+  "address": "Rua Nova, 999 - RJ"
+}
+
+### Delete (Soft Delete) — own profile
+DELETE {{baseUrl}}/api/customers/2
+X-User-Id: 2
+
+### General Dashboard
+GET {{baseUrl}}/api/customers/dashboard
+
+### Personal Dashboard (Buyer)
+GET {{baseUrl}}/api/customers/2/dashboard
+
+### Personal Dashboard (Seller)
+GET {{baseUrl}}/api/customers/1/dashboard

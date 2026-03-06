@@ -1,0 +1,46 @@
+@baseUrl = http://localhost:5006
+
+### ========== PAYMENTS ==========
+
+### Create Payment (CreditCard)
+POST {{baseUrl}}/api/payments
+Content-Type: application/json
+
+{
+  "orderId": 1,
+  "buyerId": 2,
+  "amount": 299.90,
+  "method": "CreditCard"
+}
+
+### Create Payment (Pix)
+POST {{baseUrl}}/api/payments
+Content-Type: application/json
+
+{
+  "orderId": 2,
+  "buyerId": 2,
+  "amount": 149.50,
+  "method": "Pix"
+}
+
+### Process Payment (mock — 90% approval)
+POST {{baseUrl}}/api/payments/1/process
+
+### Get All Payments
+GET {{baseUrl}}/api/payments
+
+### Get Payments by Order
+GET {{baseUrl}}/api/payments?orderId=1
+
+### Get Payments by Buyer
+GET {{baseUrl}}/api/payments?buyerId=2
+
+### Get Payment by ID
+GET {{baseUrl}}/api/payments/1
+
+### Refund Payment
+POST {{baseUrl}}/api/payments/1/refund
+
+### Payment Dashboard
+GET {{baseUrl}}/api/payments/dashboard

@@ -1,0 +1,49 @@
+@baseUrl = http://localhost:5004
+
+### ========== NOTIFICATIONS ==========
+
+### Health Check
+GET {{baseUrl}}/api/notifications/health
+
+### Create Notification (called by other services)
+POST {{baseUrl}}/api/notifications
+Content-Type: application/json
+
+{
+  "userId": 2,
+  "type": "OrderCreated",
+  "title": "Pedido criado",
+  "message": "Seu pedido #1 foi criado com sucesso. Total: R$ 299.90"
+}
+
+### Create Another Notification
+POST {{baseUrl}}/api/notifications
+Content-Type: application/json
+
+{
+  "userId": 2,
+  "type": "PaymentApproved",
+  "title": "Pagamento aprovado",
+  "message": "Seu pagamento de R$ 299.90 foi aprovado via CreditCard."
+}
+
+### Get Notifications for User
+GET {{baseUrl}}/api/notifications/2
+
+### Get Notifications (paginated)
+GET {{baseUrl}}/api/notifications/2?page=1&pageSize=5
+
+### Unread Count
+GET {{baseUrl}}/api/notifications/2/unread-count
+
+### Mark as Read (notification id=1)
+PUT {{baseUrl}}/api/notifications/1/read
+
+### Mark All as Read (userId=2)
+PUT {{baseUrl}}/api/notifications/2/read-all
+
+### Delete Notification
+DELETE {{baseUrl}}/api/notifications/1
+
+### Dashboard
+GET {{baseUrl}}/api/notifications/dashboard
