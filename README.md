@@ -31,7 +31,7 @@ Docker + Docker Compose
 Swagger/OpenAPI for each service
 
 Note
-appsettings files are not in .gitignore on purpose — this is an educational project.
+appsettings files are not in .gitignore on purpose — this is an educational projec, same for db seeds.
 
 Troubleshoot:
 target productservice: failed to solve: mcr.microsoft.com/dotnet/aspnet:10.0-alpine: failed to resolve source metadata for mcr.microsoft.com/dotnet/aspnet:10.0-alpine: failed to do request: Head "https://mcr.microsoft.com/v2/dotnet/aspnet/manifests/10.0-alpine": EOF
