@@ -32,3 +32,5 @@ Swagger/OpenAPI for each service
 
 Note
 appsettings files are not in .gitignore on purpose — this is an educational project.
+
+Docker Compose already has the frontend, but this is a future deliverable, so i did not gited the frontend yet (since it's not finished)
