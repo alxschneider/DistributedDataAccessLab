@@ -33,4 +33,7 @@ Swagger/OpenAPI for each service
 Note
 appsettings files are not in .gitignore on purpose — this is an educational project.
 
-Docker Compose already has the frontend, but this is a future deliverable, so i did not gited the frontend yet (since it's not finished)
+Troubleshoot:
+target productservice: failed to solve: mcr.microsoft.com/dotnet/aspnet:10.0-alpine: failed to resolve source metadata for mcr.microsoft.com/dotnet/aspnet:10.0-alpine: failed to do request: Head "https://mcr.microsoft.com/v2/dotnet/aspnet/manifests/10.0-alpine": EOF
+
+getting these msg sometimes when trying to run composer, for me, at least, is a connection issue, just retry and it will work!
