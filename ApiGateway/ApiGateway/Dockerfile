@@ -10,12 +10,11 @@ RUN dotnet restore
 COPY . ./
 RUN dotnet publish -c Release -o /app/publish
 
-# Stage 2: Runtime (cleaner build, no source code, only published output)
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime 
+# Stage 2: Runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
 
 # Copy published output from build stage
 COPY --from=build /app/publish .
 
-# ENTRYPOINT must be JSON array (exec form) - same as running dll in terminal
-ENTRYPOINT ["dotnet", "CustomerService.Api.dll"]
+ENTRYPOINT ["dotnet", "ApiGateway.dll"]

@@ -14,6 +14,11 @@ launchSettings.json
 ## Rider
 .idea/
 
+## SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
 ## OS
 Thumbs.db
 Desktop.ini

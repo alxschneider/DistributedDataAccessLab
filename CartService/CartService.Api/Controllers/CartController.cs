@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using CartService.Api.Data;
+using CartService.Api.Dtos;
 using CartService.Api.Models;
 using CartService.Api.Services;
 
@@ -26,6 +27,20 @@ public class CartController : ControllerBase
     //!!!IMporant: In a bigger or prod enviroment, its normal to have the business logic in a separate service layer, and the controller just calls that service.
     //  For simplicity, we put all logic in the controller here.!!!
 
+    private static CartResponseDto MapToDto(Cart cart)
+    {
+        var total = cart.Items.Sum(i => i.UnitPrice * (1 - i.DiscountPercent / 100) * i.Quantity);
+        return new CartResponseDto(
+            cart.Id, cart.BuyerId,
+            cart.Items.Select(i => new CartItemResponseDto(
+                i.Id, i.ProductId, i.SellerId, i.ProductName,
+                i.Quantity, i.UnitPrice, i.DiscountPercent
+            )).ToList(),
+            Math.Round(total, 2),
+            cart.CreatedAt, cart.UpdatedAt
+        );
+    }
+
     /// <summary>
     /// Get cart with items for a buyer
     /// </summary>
@@ -37,7 +52,7 @@ public class CartController : ControllerBase
             .FirstOrDefaultAsync(c => c.BuyerId == buyerId);
 
         if (cart == null)
-            return Ok(new { BuyerId = buyerId, Items = Array.Empty<object>(), Total = 0m });
+            return Ok(new EmptyCartDto(buyerId, Array.Empty<object>(), 0m));
 
         var total = cart.Items.Sum(i =>
         {
@@ -45,22 +60,22 @@ public class CartController : ControllerBase
             return finalPrice * i.Quantity;
         });
 
-        return Ok(new
-        {
-            cart.Id,
-            cart.BuyerId,
-            cart.Items,
-            Total = Math.Round(total, 2),
-            cart.CreatedAt,
-            cart.UpdatedAt
-        });
+        return Ok(new CartResponseDto(
+            cart.Id, cart.BuyerId,
+            cart.Items.Select(i => new CartItemResponseDto(
+                i.Id, i.ProductId, i.SellerId, i.ProductName,
+                i.Quantity, i.UnitPrice, i.DiscountPercent
+            )).ToList(),
+            Math.Round(total, 2),
+            cart.CreatedAt, cart.UpdatedAt
+        ));
     }
 
     /// <summary>
     /// Add item to cart (validates product via ProductService)
     /// </summary>
     [HttpPost("{buyerId}/items")]
-    public async Task<IActionResult> AddItem(int buyerId, [FromBody] AddCartItemRequest request)
+    public async Task<IActionResult> AddItem(int buyerId, [FromBody] AddCartItemDto request)
     {
         // Validate product
         var product = await _productClient.GetProductAsync(request.ProductId);
@@ -120,14 +135,14 @@ public class CartController : ControllerBase
             "Someone added your course to cart",
             $"A buyer added '{product.Name}' (x{request.Quantity}) to their cart.");
 
-        return Ok(cart);
+        return Ok(MapToDto(cart));
     }
 
     /// <summary>
     /// Update item quantity
     /// </summary>
     [HttpPut("{buyerId}/items/{itemId}")]
-    public async Task<IActionResult> UpdateItem(int buyerId, int itemId, [FromBody] UpdateCartItemRequest request)
+    public async Task<IActionResult> UpdateItem(int buyerId, int itemId, [FromBody] UpdateCartItemDto request)
     {
         var cart = await _context.Carts
             .Include(c => c.Items)
@@ -152,7 +167,7 @@ public class CartController : ControllerBase
         cart.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
-        return Ok(cart);
+        return Ok(MapToDto(cart));
     }
 
     /// <summary>
@@ -227,17 +242,6 @@ public class CartController : ControllerBase
         _context.Carts.Remove(cart);
         await _context.SaveChangesAsync();
 
-        return Ok(new { Message = "Checkout successful", OrderId = orderId });
+        return Ok(new CheckoutResponseDto("Checkout successful", orderId));
     }
-}
-
-public class AddCartItemRequest
-{
-    public int ProductId { get; set; }
-    public int Quantity { get; set; } = 1;
-}
-
-public class UpdateCartItemRequest
-{
-    public int Quantity { get; set; }
 }

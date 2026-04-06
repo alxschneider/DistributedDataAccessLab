@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NotificationService.Api.Data;
+using NotificationService.Api.Dtos;
 using NotificationService.Api.Models;
 
 namespace NotificationService.Api.Controllers;
@@ -18,6 +19,10 @@ public class NotificationsController : ControllerBase
 
     //!!!IMporant: In a bigger or prod enviroment, its normal to have the business logic in a separate service layer, and the controller just calls that service.
     //  For simplicity, we put all logic in the controller here.!!!
+
+    private static NotificationResponseDto MapToDto(Notification n) => new(
+        n.Id, n.UserId, n.Type, n.Title, n.Message, n.IsRead, n.CreatedAt
+    );
 
     [HttpGet("health")]
     public IActionResult Health()
@@ -41,13 +46,10 @@ public class NotificationsController : ControllerBase
             .Take(pageSize)
             .ToListAsync();
 
-        return Ok(new
-        {
-            Total = total,
-            Page = page,
-            PageSize = pageSize,
-            Items = notifications
-        });
+        return Ok(new NotificationPageDto(
+            total, page, pageSize,
+            notifications.Select(MapToDto).ToList()
+        ));
     }
 
     /// <summary>
@@ -57,14 +59,14 @@ public class NotificationsController : ControllerBase
     public async Task<IActionResult> UnreadCount(int userId)
     {
         var count = await _context.Notifications.CountAsync(n => n.UserId == userId && !n.IsRead);
-        return Ok(new { UserId = userId, UnreadCount = count });
+        return Ok(new UnreadCountDto(userId, count));
     }
 
     /// <summary>
     /// Create a notification (called by other services via HTTP)
     /// </summary>
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateNotificationRequest request)
+    public async Task<IActionResult> Create([FromBody] CreateNotificationDto request)
     {
         var notification = new Notification
         {
@@ -78,7 +80,7 @@ public class NotificationsController : ControllerBase
         await _context.Notifications.AddAsync(notification);
         await _context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetByUser), new { userId = notification.UserId }, notification);
+        return CreatedAtAction(nameof(GetByUser), new { userId = notification.UserId }, MapToDto(notification));
     }
 
     /// <summary>
@@ -94,7 +96,7 @@ public class NotificationsController : ControllerBase
         notification.IsRead = true;
         await _context.SaveChangesAsync();
 
-        return Ok(notification);
+        return Ok(MapToDto(notification));
     }
 
     /// <summary>
@@ -112,7 +114,7 @@ public class NotificationsController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        return Ok(new { MarkedAsRead = unread.Count });
+        return Ok(new MarkReadResultDto(unread.Count));
     }
 
     /// <summary>
@@ -139,26 +141,17 @@ public class NotificationsController : ControllerBase
     {
         var notifications = await _context.Notifications.ToListAsync();
 
-        return Ok(new
-        {
-            TotalNotifications = notifications.Count,
-            TotalUnread = notifications.Count(n => !n.IsRead),
-            ByType = notifications.GroupBy(n => n.Type)
-                .Select(g => new { Type = g.Key, Count = g.Count() })
+        return Ok(new NotificationDashboardDto(
+            notifications.Count,
+            notifications.Count(n => !n.IsRead),
+            notifications.GroupBy(n => n.Type)
+                .Select(g => new TypeCountDto(g.Key, g.Count()))
                 .OrderByDescending(x => x.Count),
-            TopUsersByUnread = notifications.Where(n => !n.IsRead)
+            notifications.Where(n => !n.IsRead)
                 .GroupBy(n => n.UserId)
-                .Select(g => new { UserId = g.Key, UnreadCount = g.Count() })
+                .Select(g => new UserUnreadDto(g.Key, g.Count()))
                 .OrderByDescending(x => x.UnreadCount)
                 .Take(10)
-        });
+        ));
     }
-}
-
-public class CreateNotificationRequest
-{
-    public int UserId { get; set; }
-    public string Type { get; set; } = string.Empty;
-    public string Title { get; set; } = string.Empty;
-    public string Message { get; set; } = string.Empty;
 }

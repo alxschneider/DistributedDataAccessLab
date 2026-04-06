@@ -1,18 +1,33 @@
 services:
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   customerservice:
     container_name: customerservice
     build:
-      context: ./CustomerService/CustomerService.Api
-      dockerfile: Dockerfile
+      context: ./CustomerService/CustomerService.Api ## Update the context to point to the correct directory
+      dockerfile: Dockerfile  ##docker file name
     ports:
       - "5001:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      Services__OrderService: http://orderservice:8080/
-      Services__ProductService: http://productservice:8080/
+      ASPNETCORE_ENVIRONMENT: Development ##environment variable to set the environment to Development/release/staging...
+      Services__OrderService: http://orderservice:8080/ 
+      Services__ProductService: http://productservice:8080/ 
     volumes:
-      - ./CustomerService/CustomerService.Api/Data:/app/Data
-
+      - ./CustomerService/CustomerService.Api/Data:/app/Data ##db
+##used __ so that it can be read as nested configuration in appsettings.json
   productservice:
     container_name: productservice
     build:
@@ -42,6 +57,7 @@ services:
       Services__ProductService: http://productservice:8080/
       Services__NotificationService: http://notificationservice:8080/
       Services__PaymentService: http://paymentservice:8080/
+      RabbitMQ__Host: rabbitmq
     depends_on:
       customerservice:
         condition: service_started
@@ -49,6 +65,8 @@ services:
         condition: service_started
       notificationservice:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
     volumes:
       - ./OrderService/OrderService.Api/Data:/app/Data
 
@@ -61,6 +79,10 @@ services:
       - "5007:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      RabbitMQ__Host: rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     volumes:
       - ./NotificationService/NotificationService.Api/Data:/app/Data
 
@@ -104,3 +126,38 @@ services:
         condition: service_started
     volumes:
       - ./PaymentService/PaymentService.Api/Data:/app/Data
+
+  apigateway:
+    container_name: apigateway
+    build:
+      context: ./ApiGateway/ApiGateway
+      dockerfile: Dockerfile
+    ports:
+      - "5000:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Services__CustomerService: http://customerservice:8080/
+      Services__ProductService: http://productservice:8080/
+      Services__OrderService: http://orderservice:8080/
+      Services__NotificationService: http://notificationservice:8080/
+      Services__CartService: http://cartservice:8080/
+      Services__PaymentService: http://paymentservice:8080/
+      ReverseProxy__Clusters__customerservice__Destinations__default__Address: http://customerservice:8080/
+      ReverseProxy__Clusters__productservice__Destinations__default__Address: http://productservice:8080/
+      ReverseProxy__Clusters__orderservice__Destinations__default__Address: http://orderservice:8080/
+      ReverseProxy__Clusters__notificationservice__Destinations__default__Address: http://notificationservice:8080/
+      ReverseProxy__Clusters__cartservice__Destinations__default__Address: http://cartservice:8080/
+      ReverseProxy__Clusters__paymentservice__Destinations__default__Address: http://paymentservice:8080/
+    depends_on:
+      customerservice:
+        condition: service_started
+      productservice:
+        condition: service_started
+      orderservice:
+        condition: service_started
+      notificationservice:
+        condition: service_started
+      cartservice:
+        condition: service_started
+      paymentservice:
+        condition: service_started

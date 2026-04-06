@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OrderService.Api.Data;
+using OrderService.Api.Dtos;
 using OrderService.Api.Models;
 using OrderService.Api.Services;
+using MassTransit;
+using Contracts.Events;
 
 namespace OrderService.Api.Controllers;
 
@@ -15,6 +18,7 @@ public class OrdersController : ControllerBase
     private readonly IProductClient _productClient;
     private readonly INotificationClient _notificationClient;
     private readonly IPaymentClient _paymentClient;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     // Valid status transitions
     private static readonly Dictionary<string, string[]> _validTransitions = new()
@@ -30,17 +34,28 @@ public class OrdersController : ControllerBase
         ICustomerClient customerClient,
         IProductClient productClient,
         INotificationClient notificationClient,
-        IPaymentClient paymentClient)
+        IPaymentClient paymentClient,
+        IPublishEndpoint publishEndpoint)
     {
         _context = context;
         _customerClient = customerClient;
         _productClient = productClient;
         _notificationClient = notificationClient;
         _paymentClient = paymentClient;
+        _publishEndpoint = publishEndpoint;
     }
 
     //!!!IMporant: In a bigger or prod enviroment, its normal to have the business logic in a separate service layer, and the controller just calls that service.
     //  For simplicity, we put all logic in the controller here.!!!
+
+    private static OrderResponseDto MapToDto(Order o) => new(
+        o.Id, o.BuyerId, o.Status, o.Total, o.CreatedAt, o.UpdatedAt,
+        o.CancelledAt, o.ReturnedAt, o.CancellationReason, o.ReturnReason,
+        o.Items.Select(i => new OrderItemResponseDto(
+            i.Id, i.ProductId, i.SellerId, i.ProductName,
+            i.Quantity, i.UnitPrice, i.Discount, i.Subtotal
+        )).ToList()
+    );
 
     [HttpGet]
     public async Task<IActionResult> GetAll(
@@ -68,7 +83,7 @@ public class OrdersController : ControllerBase
             query = query.Where(o => o.CreatedAt <= toDate.Value);
 
         var orders = await query.OrderByDescending(o => o.CreatedAt).ToListAsync();
-        return Ok(orders);
+        return Ok(orders.Select(MapToDto));
     }
 
     [HttpGet("{id}")]
@@ -81,14 +96,14 @@ public class OrdersController : ControllerBase
         if (order == null)
             return NotFound();
 
-        return Ok(order);
+        return Ok(MapToDto(order));
     }
 
     /// <summary>
     /// Create order from a list of items. Validates buyer, products, stock. Decrements stock.
     /// </summary>
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateOrderRequest request)
+    public async Task<IActionResult> Create([FromBody] CreateOrderRequestDto request)
     {
         if (request.Items == null || request.Items.Count == 0)
             return BadRequest("Order must have at least one item.");
@@ -163,14 +178,31 @@ public class OrdersController : ControllerBase
                 $"Order #{order.Id} includes your course(s): {itemNames}. Total: $ {sellerItems.Sum(i => i.Subtotal):F2}");
         }
 
-        return CreatedAtAction(nameof(GetById), new { id = order.Id }, order);
+        // Publish OrderCreatedEvent to RabbitMQ
+        await _publishEndpoint.Publish(new OrderCreatedEvent
+        {
+            OrderId = order.Id,
+            BuyerId = order.BuyerId,
+            Total = order.Total,
+            CreatedAt = order.CreatedAt,
+            Items = order.Items.Select(i => new OrderItemEvent
+            {
+                ProductId = i.ProductId,
+                SellerId = i.SellerId,
+                ProductName = i.ProductName,
+                Quantity = i.Quantity,
+                Subtotal = i.Subtotal
+            }).ToList()
+        });
+
+        return CreatedAtAction(nameof(GetById), new { id = order.Id }, MapToDto(order));
     }
 
     /// <summary>
     /// Update order status with valid transition checks
     /// </summary>
     [HttpPut("{id}/status")]
-    public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateStatusRequest request)
+    public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateStatusDto request)
     {
         var order = await _context.Orders.Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == id);
         if (order == null)
@@ -204,7 +236,7 @@ public class OrdersController : ControllerBase
                 $"Order #{order.Id} status updated to: {request.Status}");
         }
 
-        return Ok(order);
+        return Ok(MapToDto(order));
     }
 
     /// <summary>
@@ -212,7 +244,7 @@ public class OrdersController : ControllerBase
     /// Restores stock and requests refund if paid.
     /// </summary>
     [HttpPost("{id}/cancel")]
-    public async Task<IActionResult> Cancel(int id, [FromBody] CancelOrderRequest? request)
+    public async Task<IActionResult> Cancel(int id, [FromBody] CancelOrderDto? request)
     {
         var order = await _context.Orders.Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == id);
         if (order == null)
@@ -260,7 +292,24 @@ public class OrdersController : ControllerBase
                 $"Order #{order.Id} has been cancelled by the buyer.");
         }
 
-        return Ok(order);
+        // Publish OrderCancelledEvent to RabbitMQ
+        await _publishEndpoint.Publish(new OrderCancelledEvent
+        {
+            OrderId = order.Id,
+            BuyerId = order.BuyerId,
+            Reason = request?.Reason,
+            CancelledAt = order.CancelledAt ?? DateTime.UtcNow,
+            Items = order.Items.Select(i => new OrderItemEvent
+            {
+                ProductId = i.ProductId,
+                SellerId = i.SellerId,
+                ProductName = i.ProductName,
+                Quantity = i.Quantity,
+                Subtotal = i.Subtotal
+            }).ToList()
+        });
+
+        return Ok(MapToDto(order));
     }
 
     /// <summary>
@@ -268,7 +317,7 @@ public class OrdersController : ControllerBase
     /// Restores stock and requests refund.
     /// </summary>
     [HttpPost("{id}/return")]
-    public async Task<IActionResult> Return(int id, [FromBody] ReturnOrderRequest? request)
+    public async Task<IActionResult> Return(int id, [FromBody] ReturnOrderDto? request)
     {
         var order = await _context.Orders.Include(o => o.Items).FirstOrDefaultAsync(o => o.Id == id);
         if (order == null)
@@ -313,7 +362,7 @@ public class OrdersController : ControllerBase
                 $"Order #{order.Id} has been returned by the buyer. Stock restored.");
         }
 
-        return Ok(order);
+        return Ok(MapToDto(order));
     }
 
     /// <summary>
@@ -325,20 +374,17 @@ public class OrdersController : ControllerBase
         var orders = await _context.Orders.Include(o => o.Items).ToListAsync();
         var now = DateTime.UtcNow;
 
-        return Ok(new
-        {
-            TotalOrders = orders.Count,
-            ByStatus = orders.GroupBy(o => o.Status)
-                .Select(g => new { Status = g.Key, Count = g.Count() })
-                .OrderByDescending(x => x.Count),
-            AverageTicket = orders.Count > 0 ? Math.Round(orders.Average(o => o.Total), 2) : 0,
-            TotalRevenue = Math.Round(orders.Where(o => o.Status != "Cancelled" && o.Status != "Returned").Sum(o => o.Total), 2),
-            CancelledLast7Days = orders.Count(o => o.Status == "Cancelled" && o.CancelledAt >= now.AddDays(-7)),
-            CancelledLast30Days = orders.Count(o => o.Status == "Cancelled" && o.CancelledAt >= now.AddDays(-30)),
-            ReturnedLast30Days = orders.Count(o => o.Status == "Returned" && o.ReturnedAt >= now.AddDays(-30)),
-            CancellationRate = orders.Count > 0 ? Math.Round((double)orders.Count(o => o.Status == "Cancelled") / orders.Count * 100, 2) : 0,
-            ReturnRate = orders.Count > 0 ? Math.Round((double)orders.Count(o => o.Status == "Returned") / orders.Count * 100, 2) : 0
-        });
+        return Ok(new OrderDashboardDto(
+            orders.Count,
+            orders.GroupBy(o => o.Status).Select(g => new StatusCountDto(g.Key, g.Count())).OrderByDescending(x => x.Count),
+            orders.Count > 0 ? Math.Round(orders.Average(o => o.Total), 2) : 0,
+            Math.Round(orders.Where(o => o.Status != "Cancelled" && o.Status != "Returned").Sum(o => o.Total), 2),
+            orders.Count(o => o.Status == "Cancelled" && o.CancelledAt >= now.AddDays(-7)),
+            orders.Count(o => o.Status == "Cancelled" && o.CancelledAt >= now.AddDays(-30)),
+            orders.Count(o => o.Status == "Returned" && o.ReturnedAt >= now.AddDays(-30)),
+            orders.Count > 0 ? Math.Round((double)orders.Count(o => o.Status == "Cancelled") / orders.Count * 100, 2) : 0,
+            orders.Count > 0 ? Math.Round((double)orders.Count(o => o.Status == "Returned") / orders.Count * 100, 2) : 0
+        ));
     }
 
     /// <summary>
@@ -354,14 +400,12 @@ public class OrdersController : ControllerBase
 
         var lastOrder = orders.OrderByDescending(o => o.CreatedAt).FirstOrDefault();
 
-        return Ok(new
-        {
-            TotalOrders = orders.Count,
-            TotalSpent = Math.Round(orders.Where(o => o.Status != "Cancelled" && o.Status != "Returned").Sum(o => o.Total), 2),
-            ByStatus = orders.GroupBy(o => o.Status)
-                .Select(g => new { Status = g.Key, Count = g.Count() }),
-            LastOrder = lastOrder != null ? new { lastOrder.Id, lastOrder.Status, lastOrder.Total, lastOrder.CreatedAt } : null
-        });
+        return Ok(new BuyerDashboardDto(
+            orders.Count,
+            Math.Round(orders.Where(o => o.Status != "Cancelled" && o.Status != "Returned").Sum(o => o.Total), 2),
+            orders.GroupBy(o => o.Status).Select(g => new StatusCountDto(g.Key, g.Count())),
+            lastOrder != null ? new LastOrderDto(lastOrder.Id, lastOrder.Status, lastOrder.Total, lastOrder.CreatedAt) : null
+        ));
     }
 
     /// <summary>
@@ -377,14 +421,12 @@ public class OrdersController : ControllerBase
 
         var sellerItems = orders.SelectMany(o => o.Items.Where(i => i.SellerId == sellerId)).ToList();
 
-        return Ok(new
-        {
-            TotalOrders = orders.Count,
-            TotalItemsSold = sellerItems.Sum(i => i.Quantity),
-            TotalRevenue = Math.Round(sellerItems.Sum(i => i.Subtotal), 2),
-            ByStatus = orders.GroupBy(o => o.Status)
-                .Select(g => new { Status = g.Key, Count = g.Count() }),
-            AverageOrderValue = orders.Count > 0 ? Math.Round(sellerItems.Sum(i => i.Subtotal) / orders.Count, 2) : 0
-        });
+        return Ok(new SellerDashboardDto(
+            orders.Count,
+            sellerItems.Sum(i => i.Quantity),
+            Math.Round(sellerItems.Sum(i => i.Subtotal), 2),
+            orders.GroupBy(o => o.Status).Select(g => new StatusCountDto(g.Key, g.Count())),
+            orders.Count > 0 ? Math.Round(sellerItems.Sum(i => i.Subtotal) / orders.Count, 2) : 0
+        ));
     }
 }

@@ -1,11 +1,26 @@
 using OrderService.Api.Data;
 using OrderService.Api.Services;
 using Microsoft.EntityFrameworkCore;
+using MassTransit;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<OrdersDbContext>(options =>
     options.UseSqlite("Data Source=orders.db"));
+
+// RabbitMQ with MassTransit (publisher)
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.Host(builder.Configuration["RabbitMQ:Host"] ?? "rabbitmq", "/", h =>
+        {
+            h.Username("guest");
+            h.Password("guest");
+        });
+        cfg.ConfigureEndpoints(context);
+    });
+});
 
 // HTTP clients for inter-service communication
 builder.Services.AddHttpClient<ICustomerClient, CustomerClient>(client =>

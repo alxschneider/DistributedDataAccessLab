@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using CustomerService.Api.Data;
+using CustomerService.Api.Dtos;
 using CustomerService.Api.Models;
 using CustomerService.Api.Services;
 
@@ -62,8 +63,7 @@ public class CustomersController : ControllerBase
         }
 
         var customers = await query
-            .Select(c => new
-            {
+            .Select(c => new CustomerResponseDto(
                 c.Id,
                 c.Name,
                 c.Email,
@@ -71,7 +71,7 @@ public class CustomersController : ControllerBase
                 c.Role,
                 c.Address,
                 c.CreatedAt
-            })
+            ))
             .ToListAsync();
 
         return Ok(customers);
@@ -94,46 +94,65 @@ public class CustomersController : ControllerBase
                 return StatusCode(403, "Access denied.");
         }
 
-        return Ok(customer);
+        return Ok(new CustomerDetailDto(
+            customer.Id, customer.Name, customer.Email, customer.Phone,
+            customer.Document, customer.Role, customer.Address,
+            customer.IsActive, customer.CreatedAt
+        ));
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create(Customer customer)
+    public async Task<IActionResult> Create([FromBody] CreateCustomerDto dto)
     {
-        if (customer.Role != "Buyer" && customer.Role != "Seller")
+        if (dto.Role != "Buyer" && dto.Role != "Seller")
             return BadRequest("Role must be 'Buyer' or 'Seller'.");
 
-        var emailExists = await _context.Customers.AnyAsync(c => c.Email == customer.Email && c.IsActive);
+        var emailExists = await _context.Customers.AnyAsync(c => c.Email == dto.Email && c.IsActive);
         if (emailExists)
             return BadRequest("Email already in use.");
 
-            //could have other validations here (like document uniqueness, phone format, etc)
+        var customer = new Customer
+        {
+            Name = dto.Name,
+            Email = dto.Email,
+            Phone = dto.Phone,
+            Document = dto.Document,
+            Role = dto.Role,
+            Address = dto.Address,
+            CreatedAt = DateTime.UtcNow,
+            IsActive = true
+        };
 
-        customer.CreatedAt = DateTime.UtcNow;
-        customer.IsActive = true;
+        await _context.Customers.AddAsync(customer);
+        await _context.SaveChangesAsync();
 
-        await _context.Customers.AddAsync(customer); //adding to the dbcontext, but not yet saving to the database
-        await _context.SaveChangesAsync(); //saving
-
-//using nameof to make sure the route name is correct and will be refactored if we change the method name. Also returning the created customer in the response body.
-        return CreatedAtAction(nameof(GetById), new { id = customer.Id }, customer);
+        var response = new CustomerDetailDto(
+            customer.Id, customer.Name, customer.Email, customer.Phone,
+            customer.Document, customer.Role, customer.Address,
+            customer.IsActive, customer.CreatedAt
+        );
+        return CreatedAtAction(nameof(GetById), new { id = customer.Id }, response);
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(int id, Customer updated)
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateCustomerDto dto)
     {
         var customer = await _context.Customers.FindAsync(id);
         if (customer == null || !customer.IsActive)
             return NotFound();
 
-        customer.Name = updated.Name;
-        customer.Email = updated.Email;
-        customer.Phone = updated.Phone;
-        customer.Document = updated.Document;
-        customer.Address = updated.Address;
+        customer.Name = dto.Name;
+        customer.Email = dto.Email;
+        customer.Phone = dto.Phone;
+        customer.Document = dto.Document;
+        customer.Address = dto.Address;
 
         await _context.SaveChangesAsync();
-        return Ok(customer);
+        return Ok(new CustomerDetailDto(
+            customer.Id, customer.Name, customer.Email, customer.Phone,
+            customer.Document, customer.Role, customer.Address,
+            customer.IsActive, customer.CreatedAt
+        ));
     }
 
     [HttpDelete("{id}")]
@@ -164,14 +183,9 @@ public class CustomersController : ControllerBase
         var newSellersLast30Days = await _context.Customers.CountAsync(c => c.IsActive && c.Role == "Seller" && c.CreatedAt >= thirtyDaysAgo);
         var totalInactive = await _context.Customers.CountAsync(c => !c.IsActive);
 
-        return Ok(new
-        {
-            TotalBuyers = totalBuyers,
-            TotalSellers = totalSellers,
-            NewBuyersLast30Days = newBuyersLast30Days,
-            NewSellersLast30Days = newSellersLast30Days,
-            TotalInactive = totalInactive
-        });
+        return Ok(new CustomerDashboardDto(
+            totalBuyers, totalSellers, newBuyersLast30Days, newSellersLast30Days, totalInactive
+        ));
     }
 
     /// <summary>
@@ -187,22 +201,19 @@ public class CustomersController : ControllerBase
         if (customer.Role == "Buyer")
         {
             var orderStats = await _orderStatsClient.GetBuyerDashboardAsync(id);
-            return Ok(new
-            {
-                Customer = new { customer.Id, customer.Name, customer.Role },
-                OrderStats = orderStats
-            });
+            return Ok(new PersonalDashboardDto(
+                new CustomerSummaryDto(customer.Id, customer.Name, customer.Role),
+                orderStats, null
+            ));
         }
         else // Seller
         {
             var orderStats = await _orderStatsClient.GetSellerDashboardAsync(id);
             var productStats = await _productStatsClient.GetSellerProductsDashboardAsync(id);
-            return Ok(new
-            {
-                Customer = new { customer.Id, customer.Name, customer.Role },
-                OrderStats = orderStats,
-                ProductStats = productStats
-            });
+            return Ok(new PersonalDashboardDto(
+                new CustomerSummaryDto(customer.Id, customer.Name, customer.Role),
+                orderStats, productStats
+            ));
         }
     }
 }

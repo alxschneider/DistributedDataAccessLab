@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PaymentService.Api.Data;
+using PaymentService.Api.Dtos;
 using PaymentService.Api.Models;
 using PaymentService.Api.Services;
 
@@ -28,6 +29,10 @@ public class PaymentsController : ControllerBase
     //!!!IMporant: In a bigger or prod enviroment, its normal to have the business logic in a separate service layer, and the controller just calls that service.
     //  For simplicity, we put all logic in the controller here.!!!
 
+    private static PaymentResponseDto MapToDto(Payment p) => new(
+        p.Id, p.OrderId, p.BuyerId, p.Amount, p.Method, p.Status, p.CreatedAt, p.ProcessedAt
+    );
+
     [HttpGet]
     public async Task<IActionResult> GetAll(
         [FromQuery] int? orderId,
@@ -45,7 +50,8 @@ public class PaymentsController : ControllerBase
         if (!string.IsNullOrEmpty(status))
             query = query.Where(p => p.Status == status);
 
-        return Ok(await query.OrderByDescending(p => p.CreatedAt).ToListAsync());
+        var payments = await query.OrderByDescending(p => p.CreatedAt).ToListAsync();
+        return Ok(payments.Select(MapToDto));
     }
 
     [HttpGet("{id}")]
@@ -53,14 +59,14 @@ public class PaymentsController : ControllerBase
     {
         var payment = await _context.Payments.FindAsync(id);
         if (payment == null) return NotFound();
-        return Ok(payment);
+        return Ok(MapToDto(payment));
     }
 
     /// <summary>
     /// Create a payment for an order
     /// </summary>
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreatePaymentRequest request)
+    public async Task<IActionResult> Create([FromBody] CreatePaymentDto request)
     {
         var validMethods = new[] { "CreditCard", "Pix", "Boleto" };
         if (!validMethods.Contains(request.Method))
@@ -85,7 +91,7 @@ public class PaymentsController : ControllerBase
         await _context.Payments.AddAsync(payment);
         await _context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetById), new { id = payment.Id }, payment);
+        return CreatedAtAction(nameof(GetById), new { id = payment.Id }, MapToDto(payment));
     }
 
     /// <summary>
@@ -133,16 +139,10 @@ public class PaymentsController : ControllerBase
                 $"Your payment of $ {payment.Amount:F2} for order #{payment.OrderId} was rejected. Please try again.");
         }
 
-        return Ok(new
-        {
-            payment.Id,
-            payment.OrderId,
-            payment.Status,
-            payment.Method,
-            payment.Amount,
-            payment.ProcessedAt,
-            SimulatedDelayMs = delay
-        });
+        return Ok(new PaymentProcessResultDto(
+            payment.Id, payment.OrderId, payment.Status, payment.Method,
+            payment.Amount, payment.ProcessedAt, delay
+        ));
     }
 
     /// <summary>
@@ -167,7 +167,7 @@ public class PaymentsController : ControllerBase
             "Refund processed",
             $"Your refund of $ {payment.Amount:F2} for order #{payment.OrderId} has been processed.");
 
-        return Ok(payment);
+        return Ok(MapToDto(payment));
     }
 
     /// <summary>
@@ -181,26 +181,17 @@ public class PaymentsController : ControllerBase
         var approved = payments.Where(p => p.Status == "Approved").ToList();
         var refunded = payments.Where(p => p.Status == "Refunded").ToList();
 
-        return Ok(new
-        {
-            TotalPayments = payments.Count,
-            TotalRevenue = Math.Round(approved.Sum(p => p.Amount), 2),
-            TotalRefunded = Math.Round(refunded.Sum(p => p.Amount), 2),
-            ByStatus = payments.GroupBy(p => p.Status)
-                .Select(g => new { Status = g.Key, Count = g.Count(), Total = Math.Round(g.Sum(p => p.Amount), 2) }),
-            ByMethod = payments.GroupBy(p => p.Method)
-                .Select(g => new { Method = g.Key, Count = g.Count(), Total = Math.Round(g.Sum(p => p.Amount), 2) }),
-            ApprovalRate = payments.Count(p => p.Status == "Approved" || p.Status == "Rejected") > 0
+        return Ok(new PaymentDashboardDto(
+            payments.Count,
+            Math.Round(approved.Sum(p => p.Amount), 2),
+            Math.Round(refunded.Sum(p => p.Amount), 2),
+            payments.GroupBy(p => p.Status)
+                .Select(g => new PaymentStatusStatsDto(g.Key, g.Count(), Math.Round(g.Sum(p => p.Amount), 2))),
+            payments.GroupBy(p => p.Method)
+                .Select(g => new PaymentMethodStatsDto(g.Key, g.Count(), Math.Round(g.Sum(p => p.Amount), 2))),
+            payments.Count(p => p.Status == "Approved" || p.Status == "Rejected") > 0
                 ? Math.Round((double)payments.Count(p => p.Status == "Approved") / payments.Count(p => p.Status == "Approved" || p.Status == "Rejected") * 100, 2)
                 : 0
-        });
+        ));
     }
-}
-
-public class CreatePaymentRequest
-{
-    public int OrderId { get; set; }
-    public int BuyerId { get; set; }
-    public decimal Amount { get; set; }
-    public string Method { get; set; } = "CreditCard";
 }
