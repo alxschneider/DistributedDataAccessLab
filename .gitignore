@@ -26,6 +26,3 @@ Desktop.ini
 
 ## User secrets
 secrets.json
-
-## Exclude WebFrontend
-WebFrontend/

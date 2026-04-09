@@ -1,0 +1,159 @@
+@page "/notifications"
+@using WebFrontend.Models
+@using WebFrontend.Services
+@inject NotificationService NotifSvc
+@inject CustomerService CustSvc
+@inject ProfileState Profile
+@rendermode InteractiveServer
+
+<PageTitle>Notifications — FDU Marketplace</PageTitle>
+
+<h3>Notifications</h3>
+
+<div class="row mb-3 g-2">
+    <div class="col-md-4">
+        <div class="input-group">
+            <span class="input-group-text">User</span>
+            <select class="form-select" @bind="userId">
+                <option value="0">— Select User —</option>
+                @foreach (var c in allCustomers)
+                {
+                    <option value="@c.Id">@c.Name (@c.Role)</option>
+                }
+            </select>
+            <button class="btn btn-primary" @onclick="LoadNotifications">Load</button>
+        </div>
+    </div>
+    @if (userId > 0)
+    {
+        <div class="col-md-3">
+            <span class="badge bg-danger fs-6">@unreadCount unread</span>
+            <button class="btn btn-sm btn-outline-success ms-2" @onclick="MarkAllRead">✅ Mark All Read</button>
+        </div>
+    }
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-success alert-dismissible">
+        @message
+        <button type="button" class="btn-close" @onclick="() => message = null"></button>
+    </div>
+}
+
+@if (notifications == null && userId > 0)
+{
+    <p><em>Loading...</em></p>
+}
+else if (notifications != null && !notifications.Any())
+{
+    <div class="alert alert-info">No notifications.</div>
+}
+else if (notifications != null)
+{
+    @foreach (var n in notifications)
+    {
+        <div class="card mb-2 @(n.IsRead ? "" : "border-fdu-gold")" style="@(n.IsRead ? "" : "border-width: 2px;")">
+            <div class="card-body py-2 d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="badge @GetTypeBadge(n.Type) me-2">@n.Type</span>
+                    <strong>@n.Title</strong>
+                    <br />
+                    <small class="text-muted">@n.Message</small>
+                    <br />
+                    <small class="text-muted">@n.CreatedAt.ToString("dd/MM/yyyy HH:mm")</small>
+                </div>
+                <div class="d-flex gap-1">
+                    @if (!n.IsRead)
+                    {
+                        <button class="btn btn-sm btn-outline-success" @onclick="() => MarkRead(n.Id)" title="Mark read">✅</button>
+                    }
+                    else
+                    {
+                        <span class="badge bg-light text-muted">Read</span>
+                    }
+                    <button class="btn btn-sm btn-outline-danger" @onclick="() => Delete(n.Id)" title="Delete">🗑️</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="d-flex gap-2 mt-2">
+        @if (page > 1)
+        {
+            <button class="btn btn-outline-primary" @onclick="PrevPage">← Previous</button>
+        }
+        <span class="align-self-center">Page @(page)</span>
+        @if (notifications.Count == pageSize)
+        {
+            <button class="btn btn-outline-primary" @onclick="NextPage">Next →</button>
+        }
+    </div>
+}
+
+@code {
+    private int userId;
+    private List<Notification>? notifications;
+    private int unreadCount;
+    private int page = 1;
+    private int pageSize = 10;
+    private string? message;
+    private List<Customer> allCustomers = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { allCustomers = await CustSvc.GetAllAsync(); } catch { }
+        if (Profile.HasProfile)
+        {
+            // Buyer or Seller: auto-load own notifications
+            userId = Profile.CurrentId;
+            await LoadNotifications();
+        }
+        // Admin: user must select from dropdown
+    }
+
+    private async Task LoadNotifications()
+    {
+        if (userId <= 0) return;
+        try
+        {
+            notifications = await NotifSvc.GetByUserAsync(userId, page, pageSize);
+            unreadCount = await NotifSvc.GetUnreadCountAsync(userId);
+        }
+        catch { notifications = new(); }
+    }
+
+    private async Task MarkRead(int id)
+    {
+        await NotifSvc.MarkAsReadAsync(id);
+        await LoadNotifications();
+    }
+
+    private async Task MarkAllRead()
+    {
+        await NotifSvc.MarkAllAsReadAsync(userId);
+        message = "All marked as read!";
+        await LoadNotifications();
+    }
+
+    private async Task Delete(int id)
+    {
+        await NotifSvc.DeleteAsync(id);
+        await LoadNotifications();
+    }
+
+    private async Task PrevPage() { page--; await LoadNotifications(); }
+    private async Task NextPage() { page++; await LoadNotifications(); }
+
+    private string GetTypeBadge(string type) => type switch
+    {
+        "OrderCreated" => "bg-fdu-burgundy",
+        "OrderCancelled" => "bg-danger",
+        "OrderReturned" => "bg-fdu-gold",
+        "PaymentApproved" => "bg-success",
+        "PaymentRejected" => "bg-danger",
+        "PaymentRefunded" => "bg-fdu-dark",
+        "StatusChanged" => "bg-secondary",
+        _ => "bg-fdu-dark"
+    };
+}

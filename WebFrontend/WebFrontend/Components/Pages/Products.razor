@@ -1,0 +1,416 @@
+@page "/products"
+@using WebFrontend.Models
+@using WebFrontend.Services
+@inject ProductService ProductSvc
+@inject CustomerService CustSvc
+@inject CartService CartSvc
+@inject ProfileState Profile
+@rendermode InteractiveServer
+
+<PageTitle>@(Profile.IsBuyer ? "Courses" : "Products") — FDU Marketplace</PageTitle>
+
+@if (Profile.IsBuyer)
+{
+    <!-- ===== BUYER: E-COMMERCE STOREFRONT ===== -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>FDU Vancouver Courses</h3>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small text-muted">Category</label>
+                    <select class="form-select" @bind="filterCategory">
+                        <option value="">All Categories</option>
+                        <option value="Undergraduate">Undergraduate</option>
+                        <option value="Graduate">Graduate</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small text-muted">Search</label>
+                    <input class="form-control" placeholder="Search courses..." @bind="filterSearch" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted">Min $</label>
+                    <input class="form-control" type="number" placeholder="0" @bind="filterMinPrice" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted">Max $</label>
+                    <input class="form-control" type="number" placeholder="99999" @bind="filterMaxPrice" />
+                </div>
+                <div class="col-md-1">
+                    <button class="btn w-100 text-white" style="background: var(--fdu-burgundy);" @onclick="LoadProducts">🔍</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (products == null)
+    {
+        <p><em>Loading courses...</em></p>
+    }
+    else if (!products.Any())
+    {
+        <div class="alert alert-info">No courses found matching your filters.</div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var course in products)
+            {
+                <div class="col-md-4 col-lg-3">
+                    <div class="card h-100 shadow-sm border-0" style="overflow: hidden;">
+                        <div style="height: 170px; overflow: hidden;">
+                            <img src="@(string.IsNullOrEmpty(course.ImageUrl) ? "https://images.unsplash.com/photo-1523050854058-8df90110c476?w=400" : course.ImageUrl)"
+                                 alt="@course.Name" style="width: 100%; height: 100%; object-fit: cover;" />
+                        </div>
+                        <div class="card-body d-flex flex-column">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge" style="background: var(--fdu-burgundy);">@course.Category</span>
+                                @if (course.DiscountPercent > 0)
+                                {
+                                    <span class="badge bg-danger">@course.DiscountPercent% OFF</span>
+                                }
+                            </div>
+                            <h6 class="card-title fw-bold mb-1">@course.Name</h6>
+                            <p class="text-muted small flex-grow-1 mb-2">@TruncateText(course.Description, 100)</p>
+                            <div class="d-flex justify-content-between align-items-center mt-auto pt-2" style="border-top: 1px solid #eee;">
+                                <div>
+                                    @if (course.DiscountPercent > 0)
+                                    {
+                                        <small class="text-decoration-line-through text-muted d-block">$ @course.Price.ToString("N2")</small>
+                                    }
+                                    <span class="fw-bold fs-5" style="color: var(--fdu-burgundy);">$ @course.FinalPrice.ToString("N2")</span>
+                                </div>
+                                <button class="btn text-white" style="background: var(--fdu-red);"
+                                        @onclick="() => AddToCart(course)" disabled="@(course.Stock <= 0)">
+                                    @(course.Stock > 0 ? "Add to Cart" : "Sold Out")
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(cartMessage))
+    {
+        <div class="alert @(cartError ? "alert-danger" : "alert-success") mt-3 alert-dismissible fade show">
+            @cartMessage
+            <button type="button" class="btn-close" @onclick="() => cartMessage = null"></button>
+        </div>
+    }
+}
+else
+{
+    <!-- ===== ADMIN / SELLER: CRUD TABLE ===== -->
+    <h3>@(Profile.IsSeller ? "My Courses" : "Products")</h3>
+
+    <div class="row mb-3 g-2">
+        <div class="col-md-2">
+            <input class="form-control" placeholder="Category" @bind="filterCategory" />
+        </div>
+        <div class="col-md-3">
+            <input class="form-control" placeholder="Search name..." @bind="filterSearch" />
+        </div>
+        <div class="col-md-1">
+            <input class="form-control" type="number" placeholder="Min $" @bind="filterMinPrice" />
+        </div>
+        <div class="col-md-1">
+            <input class="form-control" type="number" placeholder="Max $" @bind="filterMaxPrice" />
+        </div>
+        @if (!Profile.IsSeller)
+        {
+            <div class="col-md-2">
+                <select class="form-select" @bind="filterSellerId">
+                    <option value="">All Sellers</option>
+                    @foreach (var c in sellers)
+                    {
+                        <option value="@c.Id">@c.Name</option>
+                    }
+                </select>
+            </div>
+        }
+        <div class="col-md-2">
+            <button class="btn btn-primary w-100" @onclick="LoadProducts">🔍 Search</button>
+        </div>
+        <div class="col-md-2 text-end">
+            <button class="btn btn-success" @onclick="ShowCreate">➕ New @(Profile.IsSeller ? "Course" : "Product")</button>
+        </div>
+    </div>
+
+    @if (showForm)
+    {
+        <div class="card mb-3">
+            <div class="card-header">@(editingId.HasValue ? "Edit" : "New") @(Profile.IsSeller ? "Course" : "Product")</div>
+            <div class="card-body">
+                <div class="row g-2">
+                    @if (!Profile.IsSeller)
+                    {
+                        <div class="col-md-3">
+                            <label class="form-label">Seller</label>
+                            <select class="form-select" @bind="form.SellerId">
+                                <option value="0">— Select Seller —</option>
+                                @foreach (var c in sellers)
+                                {
+                                    <option value="@c.Id">@c.Name</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    <div class="col-md-3">
+                        <label class="form-label">Name</label>
+                        <input class="form-control" @bind="form.Name" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Description</label>
+                        <input class="form-control" @bind="form.Description" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Category</label>
+                        <input class="form-control" @bind="form.Category" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Price</label>
+                        <input class="form-control" type="number" step="0.01" @bind="form.Price" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Stock</label>
+                        <input class="form-control" type="number" @bind="form.Stock" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Discount %</label>
+                        <input class="form-control" type="number" step="0.1" @bind="form.DiscountPercent" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Image URL</label>
+                        <input class="form-control" @bind="form.ImageUrl" />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end gap-2">
+                        <button class="btn btn-primary" @onclick="Save">💾 Save</button>
+                        <button class="btn btn-secondary" @onclick="CancelForm">Cancel</button>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(message))
+                {
+                    <div class="alert @(isError ? "alert-danger" : "alert-success") mt-2 mb-0">@message</div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (showStockForm)
+    {
+        <div class="card mb-3">
+            <div class="card-header">Update Stock — Product #@stockProductId</div>
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label">New Stock Quantity</label>
+                        <input class="form-control" type="number" @bind="newStockQty" />
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-warning" @onclick="SaveStock">Update Stock</button>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">New Discount %</label>
+                        <input class="form-control" type="number" step="0.1" @bind="newDiscount" />
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-info" @onclick="SaveDiscount">Update Discount</button>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-secondary" @onclick="() => showStockForm = false">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (products == null)
+    {
+        <p><em>Loading...</em></p>
+    }
+    else if (!products.Any())
+    {
+        <div class="alert alert-info">No products found.</div>
+    }
+    else
+    {
+        <table class="table table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    @if (!Profile.IsSeller) { <th>Seller</th> }
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Price</th>
+                    <th>Discount</th>
+                    <th>Final Price</th>
+                    <th>Stock</th>
+                    <th>Active</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in products)
+                {
+                    <tr class="@(p.Stock == 0 ? "table-danger" : "")">
+                        <td>@p.Id</td>
+                        @if (!Profile.IsSeller) { <td>@SellerName(p.SellerId)</td> }
+                        <td>@p.Name</td>
+                        <td>@p.Category</td>
+                        <td>$ @p.Price.ToString("N2")</td>
+                        <td>@(p.DiscountPercent > 0 ? $"{p.DiscountPercent}%" : "—")</td>
+                        <td><strong>$ @p.FinalPrice.ToString("N2")</strong></td>
+                        <td>@p.Stock</td>
+                        <td>@(p.IsActive ? "✅" : "❌")</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => Edit(p)" title="Edit">✏️</button>
+                            <button class="btn btn-sm btn-outline-warning" @onclick="() => ShowStock(p)" title="Stock/Discount">📊</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => Delete(p)" title="Delete">🗑️</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private List<Product>? products;
+    private Product form = new();
+    private bool showForm, showStockForm;
+    private int? editingId;
+    private string? message;
+    private bool isError;
+    private string filterCategory = "", filterSearch = "";
+    private decimal? filterMinPrice, filterMaxPrice;
+    private int? filterSellerId;
+    private List<Customer> sellers = new();
+    private int stockProductId;
+    private int newStockQty;
+    private decimal newDiscount;
+    private string? cartMessage;
+    private bool cartError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { sellers = await CustSvc.GetAllAsync("Seller"); } catch { }
+        if (Profile.IsSeller)
+            filterSellerId = Profile.CurrentId;
+        await LoadProducts();
+    }
+
+    private string SellerName(int id) => sellers.FirstOrDefault(c => c.Id == id)?.Name ?? $"#{id}";
+
+    private string TruncateText(string text, int maxLength) =>
+        text.Length <= maxLength ? text : text[..maxLength] + "…";
+
+    private async Task LoadProducts()
+    {
+        try { products = await ProductSvc.GetAllAsync(filterCategory, filterSearch, filterMinPrice, filterMaxPrice, filterSellerId); }
+        catch { products = new(); }
+    }
+
+    private async Task AddToCart(Product course)
+    {
+        try
+        {
+            var resp = await CartSvc.AddItemAsync(Profile.CurrentId, course.Id, 1);
+            if (resp.IsSuccessStatusCode)
+            {
+                cartMessage = $"✅ \"{course.Name}\" added to cart!";
+                cartError = false;
+            }
+            else
+            {
+                cartMessage = $"⚠️ Could not add to cart.";
+                cartError = true;
+            }
+        }
+        catch
+        {
+            cartMessage = "⚠️ Cart service unavailable.";
+            cartError = true;
+        }
+    }
+
+    private void ShowCreate()
+    {
+        form = new Product();
+        if (Profile.IsSeller)
+            form.SellerId = Profile.CurrentId;
+        editingId = null;
+        showForm = true;
+        showStockForm = false;
+        message = null;
+    }
+
+    private void Edit(Product p)
+    {
+        form = new Product
+        {
+            SellerId = p.SellerId, Name = p.Name, Description = p.Description,
+            Category = p.Category, Price = p.Price, Stock = p.Stock,
+            DiscountPercent = p.DiscountPercent, ImageUrl = p.ImageUrl
+        };
+        editingId = p.Id;
+        showForm = true;
+        showStockForm = false;
+        message = null;
+    }
+
+    private void ShowStock(Product p)
+    {
+        stockProductId = p.Id;
+        newStockQty = p.Stock;
+        newDiscount = p.DiscountPercent;
+        showStockForm = true;
+        showForm = false;
+    }
+
+    private void CancelForm() { showForm = false; message = null; }
+
+    private async Task Save()
+    {
+        HttpResponseMessage resp;
+        if (editingId.HasValue)
+            resp = await ProductSvc.UpdateAsync(editingId.Value, form, form.SellerId);
+        else
+            resp = await ProductSvc.CreateAsync(form);
+
+        if (resp.IsSuccessStatusCode)
+        {
+            showForm = false;
+            message = null;
+            await LoadProducts();
+        }
+        else
+        {
+            message = $"Error: {await resp.Content.ReadAsStringAsync()}";
+            isError = true;
+        }
+    }
+
+    private async Task SaveStock()
+    {
+        await ProductSvc.UpdateStockAsync(stockProductId, newStockQty);
+        await LoadProducts();
+    }
+
+    private async Task SaveDiscount()
+    {
+        await ProductSvc.UpdateDiscountAsync(stockProductId, newDiscount);
+        await LoadProducts();
+    }
+
+    private async Task Delete(Product p)
+    {
+        await ProductSvc.DeleteAsync(p.Id, p.SellerId);
+        await LoadProducts();
+    }
+}
