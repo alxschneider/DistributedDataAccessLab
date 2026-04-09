@@ -7,20 +7,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// API base URLs (configurable via env vars for Docker)
-var customerUrl = builder.Configuration["Services:CustomerService"] ?? "http://localhost:5001";
-var orderUrl = builder.Configuration["Services:OrderService"] ?? "http://localhost:5002";
-var productUrl = builder.Configuration["Services:ProductService"] ?? "http://localhost:5003";
-var notificationUrl = builder.Configuration["Services:NotificationService"] ?? "http://localhost:5004";
-var cartUrl = builder.Configuration["Services:CartService"] ?? "http://localhost:5005";
-var paymentUrl = builder.Configuration["Services:PaymentService"] ?? "http://localhost:5006";
+// All traffic goes through the API Gateway
+var gatewayUrl = builder.Configuration["Services:ApiGateway"] ?? "http://localhost:5000";
 
-builder.Services.AddHttpClient<CustomerService>(c => c.BaseAddress = new Uri(customerUrl));
-builder.Services.AddHttpClient<ProductService>(c => c.BaseAddress = new Uri(productUrl));
-builder.Services.AddHttpClient<OrderService>(c => c.BaseAddress = new Uri(orderUrl));
-builder.Services.AddHttpClient<CartService>(c => c.BaseAddress = new Uri(cartUrl));
-builder.Services.AddHttpClient<PaymentService>(c => c.BaseAddress = new Uri(paymentUrl));
-builder.Services.AddHttpClient<NotificationService>(c => c.BaseAddress = new Uri(notificationUrl));
+builder.Services.AddHttpClient<CustomerService>(c => c.BaseAddress = new Uri(gatewayUrl));
+builder.Services.AddHttpClient<ProductService>(c => c.BaseAddress = new Uri(gatewayUrl));
+builder.Services.AddHttpClient<OrderService>(c => c.BaseAddress = new Uri(gatewayUrl));
+builder.Services.AddHttpClient<CartService>(c => c.BaseAddress = new Uri(gatewayUrl));
+builder.Services.AddHttpClient<PaymentService>(c => c.BaseAddress = new Uri(gatewayUrl));
+builder.Services.AddHttpClient<NotificationService>(c => c.BaseAddress = new Uri(gatewayUrl));
 
 builder.Services.AddScoped<ProfileState>();
 
