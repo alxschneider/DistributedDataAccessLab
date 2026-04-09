@@ -1,0 +1,89 @@
+@page "/notifications"
+@rendermode InteractiveServer
+@inject IHttpClientFactory HttpFactory
+
+<PageTitle>Notifications</PageTitle>
+
+<h1>Notifications</h1>
+
+<div class="row mb-3">
+    <div class="col-auto">
+        <label class="form-label">User ID</label>
+        <input type="number" class="form-control form-control-sm" @bind="userId" />
+    </div>
+    <div class="col-auto d-flex align-items-end">
+        <button class="btn btn-primary btn-sm" @onclick="Load">Load</button>
+    </div>
+</div>
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else if (error != null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+else if (result != null)
+{
+    <p>Total: @result.Total for User #@userId</p>
+    <table class="table table-striped table-bordered table-sm">
+        <thead class="table-dark">
+            <tr><th>ID</th><th>Type</th><th>Title</th><th>Message</th><th>Read</th><th>Created</th></tr>
+        </thead>
+        <tbody>
+            @if (result.Items == null || result.Items.Count == 0)
+            {
+                <tr><td colspan="6" class="text-muted text-center">No notifications.</td></tr>
+            }
+            @foreach (var n in result.Items ?? new())
+            {
+                <tr class="@(n.IsRead ? "" : "table-warning")">
+                    <td>@n.Id</td>
+                    <td><span class="badge bg-info text-dark">@n.Type</span></td>
+                    <td>@n.Title</td>
+                    <td>@n.Message</td>
+                    <td>@(n.IsRead ? "Yes" : "No")</td>
+                    <td>@n.CreatedAt?.ToString("yyyy-MM-dd HH:mm")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <p class="text-muted"><em>Notifications created via RabbitMQ consumers are marked with "(async)" in the title.</em></p>
+}
+
+@code {
+    private int userId = 2;
+    private bool loading;
+    private string? error;
+    private NotificationPage? result;
+
+    private async Task Load()
+    {
+        loading = true; error = null;
+        try
+        {
+            var http = HttpFactory.CreateClient("Api");
+            result = await http.GetFromJsonAsync<NotificationPage>($"/api/notifications/{userId}");
+        }
+        catch (Exception ex) { error = ex.Message; }
+        loading = false;
+    }
+
+    class NotificationPage
+    {
+        public int Total { get; set; }
+        public List<NotificationRow>? Items { get; set; }
+    }
+
+    class NotificationRow
+    {
+        public int Id { get; set; }
+        public int UserId { get; set; }
+        public string Type { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Message { get; set; } = "";
+        public bool IsRead { get; set; }
+        public DateTime? CreatedAt { get; set; }
+    }
+}

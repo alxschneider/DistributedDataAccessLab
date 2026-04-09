@@ -1,0 +1,69 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@inject IHttpClientFactory HttpFactory
+
+<PageTitle>Dashboard</PageTitle>
+
+<h1>Microservices Dashboard</h1>
+<p>Blazor frontend calling the API Gateway.</p>
+
+<h3>Service Health</h3>
+<table class="table table-bordered table-sm">
+    <thead class="table-dark">
+        <tr><th>Service</th><th>Endpoint</th><th>Status</th><th>Record Count</th></tr>
+    </thead>
+    <tbody>
+        @foreach (var s in services)
+        {
+            <tr>
+                <td>@s.Name</td>
+                <td><code>@s.Endpoint</code></td>
+                <td>
+                    @if (s.Loading) { <span class="text-muted">Loading...</span> }
+                    else if (s.Ok) { <span class="badge bg-success">OK</span> }
+                    else { <span class="badge bg-danger">Error</span> }
+                </td>
+                <td>@(s.Loading ? "-" : s.Count >= 0 ? s.Count.ToString() : "N/A")</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<ServiceStatus> services = new()
+    {
+        new("CustomerService", "/api/customers"),
+        new("ProductService", "/api/products"),
+        new("OrderService", "/api/orders"),
+        new("PaymentService", "/api/payments"),
+        new("NotificationService", "/api/notifications/health"),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var http = HttpFactory.CreateClient("Api");
+        foreach (var s in services)
+        {
+            try
+            {
+                var resp = await http.GetAsync(s.Endpoint);
+                s.Ok = resp.IsSuccessStatusCode;
+                if (s.Ok && !s.Endpoint.Contains("health"))
+                {
+                    var el = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                    s.Count = el.ValueKind == System.Text.Json.JsonValueKind.Array ? el.GetArrayLength() : -1;
+                }
+            }
+            catch { s.Ok = false; }
+            s.Loading = false;
+        }
+    }
+
+    class ServiceStatus
+    {
+        public string Name, Endpoint;
+        public bool Loading = true, Ok;
+        public int Count = -1;
+        public ServiceStatus(string n, string e) { Name = n; Endpoint = e; }
+    }
+}

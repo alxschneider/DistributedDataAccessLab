@@ -1,0 +1,83 @@
+@page "/payments"
+@rendermode InteractiveServer
+@inject IHttpClientFactory HttpFactory
+
+<PageTitle>Payments</PageTitle>
+
+<h1>Payments</h1>
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else if (error != null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+else
+{
+    <table class="table table-striped table-bordered table-sm">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th><th>Order</th><th>Buyer</th><th>Amount</th><th>Method</th><th>Status</th><th>Created</th><th>Processed</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (payments.Count == 0)
+            {
+                <tr><td colspan="8" class="text-muted text-center">No payments yet.</td></tr>
+            }
+            @foreach (var p in payments)
+            {
+                <tr>
+                    <td>@p.Id</td>
+                    <td>@p.OrderId</td>
+                    <td>@p.BuyerId</td>
+                    <td>@p.Amount.ToString("C")</td>
+                    <td>@p.Method</td>
+                    <td><span class="badge @StatusBadge(p.Status)">@p.Status</span></td>
+                    <td>@p.CreatedAt?.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@p.ProcessedAt?.ToString("yyyy-MM-dd HH:mm")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <p class="text-muted">Total: @payments.Count</p>
+}
+
+@code {
+    private bool loading = true;
+    private string? error;
+    private List<PaymentRow> payments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var http = HttpFactory.CreateClient("Api");
+            payments = await http.GetFromJsonAsync<List<PaymentRow>>("/api/payments") ?? new();
+        }
+        catch (Exception ex) { error = ex.Message; }
+        loading = false;
+    }
+
+    static string StatusBadge(string s) => s switch
+    {
+        "Approved" => "bg-success",
+        "Rejected" => "bg-danger",
+        "Refunded" => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+
+    class PaymentRow
+    {
+        public int Id { get; set; }
+        public int OrderId { get; set; }
+        public int BuyerId { get; set; }
+        public decimal Amount { get; set; }
+        public string Method { get; set; } = "";
+        public string Status { get; set; } = "";
+        public DateTime? CreatedAt { get; set; }
+        public DateTime? ProcessedAt { get; set; }
+    }
+}

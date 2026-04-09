@@ -148,16 +148,17 @@ services:
       ReverseProxy__Clusters__notificationservice__Destinations__default__Address: http://notificationservice:8080/
       ReverseProxy__Clusters__cartservice__Destinations__default__Address: http://cartservice:8080/
       ReverseProxy__Clusters__paymentservice__Destinations__default__Address: http://paymentservice:8080/
+
+  simplefrontend:
+    container_name: simplefrontend
+    build:
+      context: ./SimpleFrontend/SimpleFrontend
+      dockerfile: Dockerfile
+    ports:
+      - "5010:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Services__ApiGateway: http://apigateway:8080
     depends_on:
-      customerservice:
-        condition: service_started
-      productservice:
-        condition: service_started
-      orderservice:
-        condition: service_started
-      notificationservice:
-        condition: service_started
-      cartservice:
-        condition: service_started
-      paymentservice:
+      apigateway:
         condition: service_started

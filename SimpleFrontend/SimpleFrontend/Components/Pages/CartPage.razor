@@ -1,0 +1,125 @@
+@page "/cart"
+@rendermode InteractiveServer
+@inject IHttpClientFactory HttpFactory
+
+<PageTitle>Cart</PageTitle>
+
+<h1>Cart</h1>
+
+<div class="row mb-3">
+    <div class="col-auto">
+        <label class="form-label">Buyer ID</label>
+        <input type="number" class="form-control form-control-sm" @bind="buyerId" />
+    </div>
+    <div class="col-auto d-flex align-items-end">
+        <button class="btn btn-primary btn-sm" @onclick="LoadCart">Load Cart</button>
+    </div>
+</div>
+
+@if (msg != null)
+{
+    <div class="alert alert-info">@msg</div>
+}
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else if (error != null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+else if (cart != null)
+{
+    <h4>Cart for Buyer #@cart.BuyerId</h4>
+    @if (cart.Items == null || cart.Items.Count == 0)
+    {
+        <p class="text-muted">Cart is empty.</p>
+    }
+    else
+    {
+        <table class="table table-striped table-bordered table-sm">
+            <thead class="table-dark">
+                <tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Seller</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var item in cart.Items)
+                {
+                    <tr>
+                        <td>@item.ProductName</td>
+                        <td>@item.Quantity</td>
+                        <td>@item.UnitPrice.ToString("C")</td>
+                        <td>@item.SellerId</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <p><strong>Total: @cart.Total.ToString("C")</strong></p>
+    }
+
+    <h5>Add Item</h5>
+    <div class="row mb-2">
+        <div class="col-auto">
+            <input type="number" class="form-control form-control-sm" placeholder="Product ID" @bind="addProductId" />
+        </div>
+        <div class="col-auto">
+            <input type="number" class="form-control form-control-sm" placeholder="Qty" @bind="addQty" />
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-success btn-sm" @onclick="AddItem">Add</button>
+        </div>
+    </div>
+}
+
+@code {
+    private int buyerId = 2;
+    private bool loading;
+    private string? error, msg;
+    private CartResponse? cart;
+    private int addProductId = 1, addQty = 1;
+
+    private async Task LoadCart()
+    {
+        loading = true; error = null; msg = null;
+        try
+        {
+            var http = HttpFactory.CreateClient("Api");
+            cart = await http.GetFromJsonAsync<CartResponse>($"/api/cart/{buyerId}");
+        }
+        catch (Exception ex) { error = ex.Message; }
+        loading = false;
+    }
+
+    private async Task AddItem()
+    {
+        msg = null;
+        try
+        {
+            var http = HttpFactory.CreateClient("Api");
+            var body = new { productId = addProductId, quantity = addQty };
+            var resp = await http.PostAsJsonAsync($"/api/cart/{buyerId}/items", body);
+            if (resp.IsSuccessStatusCode)
+            {
+                msg = "Item added!";
+                await LoadCart();
+            }
+            else msg = $"Error: {await resp.Content.ReadAsStringAsync()}";
+        }
+        catch (Exception ex) { msg = ex.Message; }
+    }
+
+    class CartResponse
+    {
+        public int BuyerId { get; set; }
+        public decimal Total { get; set; }
+        public List<CartItemRow>? Items { get; set; }
+    }
+
+    class CartItemRow
+    {
+        public string ProductName { get; set; } = "";
+        public int Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
+        public int SellerId { get; set; }
+    }
+}

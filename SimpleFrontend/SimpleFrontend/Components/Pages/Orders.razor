@@ -1,0 +1,133 @@
+@page "/orders"
+@rendermode InteractiveServer
+@inject IHttpClientFactory HttpFactory
+
+<PageTitle>Orders</PageTitle>
+
+<h1>Orders</h1>
+
+<h4>Create Order</h4>
+<div class="row mb-3">
+    <div class="col-auto">
+        <label class="form-label">Buyer ID</label>
+        <input type="number" class="form-control form-control-sm" @bind="newBuyerId" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label">Product ID</label>
+        <input type="number" class="form-control form-control-sm" @bind="newProductId" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label">Quantity</label>
+        <input type="number" class="form-control form-control-sm" @bind="newQty" />
+    </div>
+    <div class="col-auto d-flex align-items-end">
+        <button class="btn btn-primary btn-sm" @onclick="CreateOrder" disabled="@creating">Create</button>
+    </div>
+</div>
+
+@if (createMsg != null)
+{
+    <div class="alert @(createOk ? "alert-success" : "alert-danger") alert-dismissible">@createMsg</div>
+}
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else if (error != null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+else
+{
+    <table class="table table-striped table-bordered table-sm">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th><th>Buyer</th><th>Status</th><th>Total</th><th>Items</th><th>Created</th><th>Updated</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var o in orders)
+            {
+                <tr>
+                    <td>@o.Id</td>
+                    <td>@o.BuyerId</td>
+                    <td><span class="badge bg-secondary">@o.Status</span></td>
+                    <td>@o.Total.ToString("C")</td>
+                    <td>@(o.Items?.Count ?? 0)</td>
+                    <td>@o.CreatedAt?.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@o.UpdatedAt?.ToString("yyyy-MM-dd HH:mm")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <p class="text-muted">Total: @orders.Count</p>
+}
+
+@code {
+    private bool loading = true;
+    private string? error;
+    private List<OrderRow> orders = new();
+
+    private int newBuyerId = 2, newProductId = 1, newQty = 1;
+    private bool creating, createOk;
+    private string? createMsg;
+
+    protected override async Task OnInitializedAsync() => await LoadOrders();
+
+    private async Task LoadOrders()
+    {
+        loading = true;
+        try
+        {
+            var http = HttpFactory.CreateClient("Api");
+            orders = await http.GetFromJsonAsync<List<OrderRow>>("/api/orders") ?? new();
+        }
+        catch (Exception ex) { error = ex.Message; }
+        loading = false;
+    }
+
+    private async Task CreateOrder()
+    {
+        creating = true; createMsg = null;
+        try
+        {
+            var http = HttpFactory.CreateClient("Api");
+            var body = new { buyerId = newBuyerId, items = new[] { new { productId = newProductId, quantity = newQty } } };
+            var resp = await http.PostAsJsonAsync("/api/orders", body);
+            if (resp.IsSuccessStatusCode)
+            {
+                createOk = true;
+                createMsg = $"Order created! (triggers RabbitMQ OrderCreatedEvent)";
+                await LoadOrders();
+            }
+            else
+            {
+                createOk = false;
+                createMsg = $"Error {(int)resp.StatusCode}: {await resp.Content.ReadAsStringAsync()}";
+            }
+        }
+        catch (Exception ex) { createOk = false; createMsg = ex.Message; }
+        creating = false;
+    }
+
+    class OrderRow
+    {
+        public int Id { get; set; }
+        public int BuyerId { get; set; }
+        public string Status { get; set; } = "";
+        public decimal Total { get; set; }
+        public DateTime? CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+        public List<OrderItemRow>? Items { get; set; }
+    }
+
+    class OrderItemRow
+    {
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = "";
+        public int Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal Subtotal { get; set; }
+    }
+}
