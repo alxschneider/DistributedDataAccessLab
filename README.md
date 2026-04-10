@@ -65,6 +65,17 @@ API Gateway is available at `http://localhost:5000`.
 
 ## V3 Plus — Blazor Frontends
 
+### Blazor Hosting Model — Interactive Server (not WebAssembly)
+
+Both frontends use **Blazor Server** with `AddInteractiveServerComponents()` / `AddInteractiveServerRenderMode()`. All C# code runs on the **server**; the browser receives UI diffs over a **SignalR** WebSocket connection — no WebAssembly is involved.
+
+| Aspect | Value |
+|---|---|
+| Render mode | Interactive Server |
+| C# execution | Server-side |
+| Browser transport | SignalR (WebSocket) |
+| WebAssembly | Not used |
+
 ### SimpleFrontend (port 5010)
 
 A minimal Blazor Server application using the **default project template** (no custom styling). Provides a straightforward dashboard with Bootstrap tables showing raw data from every microservice through the API Gateway:
