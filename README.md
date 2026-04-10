@@ -65,21 +65,30 @@ API Gateway is available at `http://localhost:5000`.
 
 ## V3 Plus — Blazor Frontends
 
-### Blazor Hosting Model — Interactive Server (not WebAssembly)
+### Blazor Hosting Models
 
-Both frontends use **Blazor Server** with `AddInteractiveServerComponents()` / `AddInteractiveServerRenderMode()`. All C# code runs on the **server**; the browser receives UI diffs over a **SignalR** WebSocket connection — no WebAssembly is involved.
+The two frontends use **different Blazor hosting models** to demonstrate both approaches:
 
-| Aspect | Value |
-|---|---|
-| Render mode | Interactive Server |
-| C# execution | Server-side |
-| Browser transport | SignalR (WebSocket) |
-| WebAssembly | Not used |
+| Frontend | Hosting Model | C# Execution | Browser Transport | Served By |
+|---|---|---|---|---|
+| **SimpleFrontend** | WebAssembly (WASM) | Browser (client-side) | HTTP to API Gateway | nginx (static files) |
+| **WebFrontend** | Interactive Server | Server-side | SignalR (WebSocket) | ASP.NET Core |
 
-### SimpleFrontend (port 5010)
+### SimpleFrontend (port 5010) — Blazor WebAssembly
 
-A minimal Blazor Server application using the **default project template** (no custom styling). Provides a straightforward dashboard with Bootstrap tables showing raw data from every microservice through the API Gateway:
+A standalone **Blazor WebAssembly** application. The entire app (including the .NET runtime) is downloaded to the browser and executes client-side. API calls go through `HttpClient` → API Gateway. No server-side rendering is involved.
 
+Architecture: `Browser (WASM) → HttpClient → API Gateway → Microservices`
+
+**Key implementation details:**
+- `Microsoft.NET.Sdk.BlazorWebAssembly` project SDK
+- `HttpClient` registered with `AddScoped` pointing to the API Gateway
+- Centralized `ApiService` layer for all API calls (DI-injected into pages)
+- DTO models in `Models/` folder — decoupled from backend domain entities
+- Served as static files via **nginx** in Docker (not ASP.NET Core)
+- CORS enabled on API Gateway for cross-origin browser requests
+
+**Pages:**
 - **Dashboard** — service health status at a glance
 - **Customers / Products / Orders / Payments** — auto-loaded data tables
 - **Cart / Notifications** — lookup by Buyer/User ID

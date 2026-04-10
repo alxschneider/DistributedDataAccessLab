@@ -1,6 +1,5 @@
 @page "/cart"
-@rendermode InteractiveServer
-@inject IHttpClientFactory HttpFactory
+@inject ApiService Api
 
 <PageTitle>Cart</PageTitle>
 
@@ -75,7 +74,7 @@ else if (cart != null)
     private int buyerId = 2;
     private bool loading;
     private string? error, msg;
-    private CartResponse? cart;
+    private CartDto? cart;
     private int addProductId = 1, addQty = 1;
 
     private async Task LoadCart()
@@ -83,8 +82,7 @@ else if (cart != null)
         loading = true; error = null; msg = null;
         try
         {
-            var http = HttpFactory.CreateClient("Api");
-            cart = await http.GetFromJsonAsync<CartResponse>($"/api/cart/{buyerId}");
+            cart = await Api.GetCartAsync(buyerId);
         }
         catch (Exception ex) { error = ex.Message; }
         loading = false;
@@ -95,9 +93,8 @@ else if (cart != null)
         msg = null;
         try
         {
-            var http = HttpFactory.CreateClient("Api");
             var body = new { productId = addProductId, quantity = addQty };
-            var resp = await http.PostAsJsonAsync($"/api/cart/{buyerId}/items", body);
+            var resp = await Api.AddCartItemAsync(buyerId, body);
             if (resp.IsSuccessStatusCode)
             {
                 msg = "Item added!";
@@ -106,20 +103,5 @@ else if (cart != null)
             else msg = $"Error: {await resp.Content.ReadAsStringAsync()}";
         }
         catch (Exception ex) { msg = ex.Message; }
-    }
-
-    class CartResponse
-    {
-        public int BuyerId { get; set; }
-        public decimal Total { get; set; }
-        public List<CartItemRow>? Items { get; set; }
-    }
-
-    class CartItemRow
-    {
-        public string ProductName { get; set; } = "";
-        public int Quantity { get; set; }
-        public decimal UnitPrice { get; set; }
-        public int SellerId { get; set; }
     }
 }

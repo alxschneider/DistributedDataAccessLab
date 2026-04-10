@@ -5,7 +5,7 @@ RUN dotnet restore
 COPY . ./
 RUN dotnet publish -c Release -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
-WORKDIR /app
-COPY --from=build /app/publish .
-ENTRYPOINT ["dotnet", "SimpleFrontend.dll"]
+FROM nginx:alpine AS runtime
+COPY --from=build /app/publish/wwwroot /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/nginx.conf
+EXPOSE 8080

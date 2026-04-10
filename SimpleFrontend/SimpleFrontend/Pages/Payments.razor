@@ -1,6 +1,5 @@
 @page "/payments"
-@rendermode InteractiveServer
-@inject IHttpClientFactory HttpFactory
+@inject ApiService Api
 
 <PageTitle>Payments</PageTitle>
 
@@ -48,14 +47,13 @@ else
 @code {
     private bool loading = true;
     private string? error;
-    private List<PaymentRow> payments = new();
+    private List<PaymentDto> payments = new();
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            var http = HttpFactory.CreateClient("Api");
-            payments = await http.GetFromJsonAsync<List<PaymentRow>>("/api/payments") ?? new();
+            payments = await Api.GetPaymentsAsync();
         }
         catch (Exception ex) { error = ex.Message; }
         loading = false;
@@ -68,16 +66,4 @@ else
         "Refunded" => "bg-warning text-dark",
         _ => "bg-secondary"
     };
-
-    class PaymentRow
-    {
-        public int Id { get; set; }
-        public int OrderId { get; set; }
-        public int BuyerId { get; set; }
-        public decimal Amount { get; set; }
-        public string Method { get; set; } = "";
-        public string Status { get; set; } = "";
-        public DateTime? CreatedAt { get; set; }
-        public DateTime? ProcessedAt { get; set; }
-    }
 }

@@ -1,6 +1,5 @@
 @page "/notifications"
-@rendermode InteractiveServer
-@inject IHttpClientFactory HttpFactory
+@inject ApiService Api
 
 <PageTitle>Notifications</PageTitle>
 
@@ -56,34 +55,16 @@ else if (result != null)
     private int userId = 2;
     private bool loading;
     private string? error;
-    private NotificationPage? result;
+    private NotificationPageDto? result;
 
     private async Task Load()
     {
         loading = true; error = null;
         try
         {
-            var http = HttpFactory.CreateClient("Api");
-            result = await http.GetFromJsonAsync<NotificationPage>($"/api/notifications/{userId}");
+            result = await Api.GetNotificationsAsync(userId);
         }
         catch (Exception ex) { error = ex.Message; }
         loading = false;
-    }
-
-    class NotificationPage
-    {
-        public int Total { get; set; }
-        public List<NotificationRow>? Items { get; set; }
-    }
-
-    class NotificationRow
-    {
-        public int Id { get; set; }
-        public int UserId { get; set; }
-        public string Type { get; set; } = "";
-        public string Title { get; set; } = "";
-        public string Message { get; set; } = "";
-        public bool IsRead { get; set; }
-        public DateTime? CreatedAt { get; set; }
     }
 }

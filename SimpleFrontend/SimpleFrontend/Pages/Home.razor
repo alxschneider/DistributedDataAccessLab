@@ -1,11 +1,10 @@
 ﻿@page "/"
-@rendermode InteractiveServer
-@inject IHttpClientFactory HttpFactory
+@inject ApiService Api
 
 <PageTitle>Dashboard</PageTitle>
 
 <h1>Microservices Dashboard</h1>
-<p>Blazor frontend calling the API Gateway.</p>
+<p>Blazor WebAssembly frontend calling the API Gateway.</p>
 
 <h3>Service Health</h3>
 <table class="table table-bordered table-sm">
@@ -41,20 +40,11 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var http = HttpFactory.CreateClient("Api");
         foreach (var s in services)
         {
-            try
-            {
-                var resp = await http.GetAsync(s.Endpoint);
-                s.Ok = resp.IsSuccessStatusCode;
-                if (s.Ok && !s.Endpoint.Contains("health"))
-                {
-                    var el = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
-                    s.Count = el.ValueKind == System.Text.Json.JsonValueKind.Array ? el.GetArrayLength() : -1;
-                }
-            }
-            catch { s.Ok = false; }
+            var (ok, count) = await Api.CheckEndpointAsync(s.Endpoint);
+            s.Ok = ok;
+            s.Count = count;
             s.Loading = false;
         }
     }

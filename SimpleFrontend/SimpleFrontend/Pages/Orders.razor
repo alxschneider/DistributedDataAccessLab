@@ -1,6 +1,5 @@
 @page "/orders"
-@rendermode InteractiveServer
-@inject IHttpClientFactory HttpFactory
+@inject ApiService Api
 
 <PageTitle>Orders</PageTitle>
 
@@ -67,7 +66,7 @@ else
 @code {
     private bool loading = true;
     private string? error;
-    private List<OrderRow> orders = new();
+    private List<OrderDto> orders = new();
 
     private int newBuyerId = 2, newProductId = 1, newQty = 1;
     private bool creating, createOk;
@@ -80,8 +79,7 @@ else
         loading = true;
         try
         {
-            var http = HttpFactory.CreateClient("Api");
-            orders = await http.GetFromJsonAsync<List<OrderRow>>("/api/orders") ?? new();
+            orders = await Api.GetOrdersAsync();
         }
         catch (Exception ex) { error = ex.Message; }
         loading = false;
@@ -92,9 +90,8 @@ else
         creating = true; createMsg = null;
         try
         {
-            var http = HttpFactory.CreateClient("Api");
             var body = new { buyerId = newBuyerId, items = new[] { new { productId = newProductId, quantity = newQty } } };
-            var resp = await http.PostAsJsonAsync("/api/orders", body);
+            var resp = await Api.CreateOrderAsync(body);
             if (resp.IsSuccessStatusCode)
             {
                 createOk = true;
@@ -109,25 +106,5 @@ else
         }
         catch (Exception ex) { createOk = false; createMsg = ex.Message; }
         creating = false;
-    }
-
-    class OrderRow
-    {
-        public int Id { get; set; }
-        public int BuyerId { get; set; }
-        public string Status { get; set; } = "";
-        public decimal Total { get; set; }
-        public DateTime? CreatedAt { get; set; }
-        public DateTime? UpdatedAt { get; set; }
-        public List<OrderItemRow>? Items { get; set; }
-    }
-
-    class OrderItemRow
-    {
-        public int ProductId { get; set; }
-        public string ProductName { get; set; } = "";
-        public int Quantity { get; set; }
-        public decimal UnitPrice { get; set; }
-        public decimal Subtotal { get; set; }
     }
 }

@@ -1,24 +1,18 @@
-using SimpleFrontend.Components;
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using SimpleFrontend;
+using SimpleFrontend.Services;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebAssemblyHostBuilder.CreateDefault(args);
+builder.RootComponents.Add<App>("#app");
+builder.RootComponents.Add<HeadOutlet>("head::after");
 
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
-
-var gateway = builder.Configuration["Services:ApiGateway"] ?? "http://localhost:5000";
-
-builder.Services.AddHttpClient("Api", c => c.BaseAddress = new Uri(gateway));
-
-var app = builder.Build();
-
-if (!app.Environment.IsDevelopment())
+// All API calls go through the API Gateway
+builder.Services.AddScoped(sp => new HttpClient
 {
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
-}
+    BaseAddress = new Uri(builder.Configuration["Services:ApiGateway"] ?? "http://localhost:5000")
+});
 
-app.UseAntiforgery();
-app.MapStaticAssets();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+builder.Services.AddScoped<ApiService>();
 
-app.Run();
+await builder.Build().RunAsync();

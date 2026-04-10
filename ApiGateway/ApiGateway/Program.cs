@@ -1,5 +1,18 @@
 var builder = WebApplication.CreateBuilder(args);
 
+// CORS — required for Blazor WebAssembly calling from the browser
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins(
+                "http://localhost:5010",  // SimpleFrontend (WASM)
+                "http://localhost:5020")  // WebFrontend
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 // YARP reverse proxy
 builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
@@ -26,6 +39,8 @@ var app = builder.Build();
 
 app.UseSwagger();
 app.UseSwaggerUI();
+
+app.UseCors();
 
 app.MapControllers();
 app.MapReverseProxy();

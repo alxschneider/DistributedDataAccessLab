@@ -1,6 +1,5 @@
 @page "/customers"
-@rendermode InteractiveServer
-@inject IHttpClientFactory HttpFactory
+@inject ApiService Api
 
 <PageTitle>Customers</PageTitle>
 
@@ -44,28 +43,15 @@ else
 @code {
     private bool loading = true;
     private string? error;
-    private List<CustomerRow> customers = new();
+    private List<CustomerDto> customers = new();
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            var http = HttpFactory.CreateClient("Api");
-            customers = await http.GetFromJsonAsync<List<CustomerRow>>("/api/customers") ?? new();
+            customers = await Api.GetCustomersAsync();
         }
         catch (Exception ex) { error = ex.Message; }
         loading = false;
-    }
-
-    class CustomerRow
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = "";
-        public string Email { get; set; } = "";
-        public string? Phone { get; set; }
-        public string Role { get; set; } = "";
-        public string? Address { get; set; }
-        public bool IsActive { get; set; }
-        public DateTime? CreatedAt { get; set; }
     }
 }
